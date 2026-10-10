@@ -1,0 +1,6 @@
+{
+  "name": "Code",
+  "description": "Assistant vocal IA et professeur personnel pour apprendre l'anglais et se développer",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
