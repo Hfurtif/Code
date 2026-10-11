@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.ui.CodeViewModel
 import com.example.ui.screens.ConversationScreen
+import com.example.ui.screens.LanguageSelectionDialog
 import com.example.ui.screens.LessonsScreen
 import com.example.ui.screens.LevelTestDialog
 import com.example.ui.screens.ProgressScreen
@@ -88,7 +89,7 @@ sealed class NavTab(
     val unselectedIcon: ImageVector
 ) {
     object Conversation : NavTab("conversation", "Conversation", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
-    object Lessons : NavTab("lessons", "Leçons", Icons.Filled.School, Icons.Outlined.School)
+    object Lessons : NavTab("lessons", "Apprendre", Icons.Filled.School, Icons.Outlined.School)
     object Progress : NavTab("progress", "Progression", Icons.AutoMirrored.Filled.TrendingUp, Icons.AutoMirrored.Outlined.TrendingUp)
     object Storage : NavTab("storage", "Stockage", Icons.Filled.Storage, Icons.Outlined.Storage)
     object Settings : NavTab("settings", "Réglages", Icons.Filled.Settings, Icons.Outlined.Settings)
@@ -117,6 +118,9 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     var showLevelTestDialog by remember { mutableStateOf(false) }
 
     val infoBanner by viewModel.infoBannerMessage.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
+    val isLanguageDialogVisible by viewModel.isLanguageDialogVisible.collectAsState()
+    val showInitialLanguageDialog = !userProfile.hasSelectedInitialLanguage
 
     // Runtime Permission for Microphone
     var hasRecordAudioPermission by remember {
@@ -213,7 +217,10 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                     viewModel = viewModel,
                     onLaunchLevelTest = { showLevelTestDialog = true }
                 )
-                3 -> StorageScreen(viewModel = viewModel)
+                3 -> StorageScreen(
+                    viewModel = viewModel,
+                    onNavigateToConversation = { selectedTabIndex = 0 }
+                )
                 4 -> SettingsScreen(viewModel = viewModel)
             }
 
@@ -254,6 +261,20 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 LevelTestDialog(
                     viewModel = viewModel,
                     onDismiss = { showLevelTestDialog = false }
+                )
+            }
+
+            // Language Selection Modal Dialog (First launch or manual change)
+            if (showInitialLanguageDialog || isLanguageDialogVisible) {
+                LanguageSelectionDialog(
+                    currentLanguageCode = userProfile.preferredLanguageCode,
+                    onSelectLanguage = { lang ->
+                        viewModel.selectLanguage(lang)
+                    },
+                    onDismiss = {
+                        viewModel.hideLanguageDialog()
+                    },
+                    isFirstLaunch = showInitialLanguageDialog
                 )
             }
         }

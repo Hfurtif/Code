@@ -5,6 +5,7 @@ import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import android.speech.tts.Voice
 import android.util.Log
+import com.example.data.model.AppLanguage
 import java.util.Locale
 
 data class TtsVoiceInfo(
@@ -27,15 +28,22 @@ class TtsManager(
     private var currentRate = 1.0f
     private var currentPitch = 1.0f
     private var currentVoiceName: String? = null
+    private var currentLanguageCode: String = "fr-FR"
+    private var pendingSpeechText: String? = null
 
     init {
-        tts = TextToSpeech(context, this)
+        try {
+            tts = TextToSpeech(context, this)
+        } catch (e: Exception) {
+            Log.e("TtsManager", "Failed to construct TextToSpeech", e)
+            onInitComplete(false)
+        }
     }
 
     override fun onInit(status: Int) {
         if (status == TextToSpeech.SUCCESS) {
             isInitialized = true
-            tts?.language = Locale.US
+            applyCurrentLanguage()
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) {
                     onSpeakingStateChanged(true)
@@ -56,9 +64,50 @@ class TtsManager(
                 }
             })
             onInitComplete(true)
+
+            // Speak queued speech if any was requested prior to initialization
+            pendingSpeechText?.let { pending ->
+                pendingSpeechText = null
+                speak(pending)
+            }
         } else {
             isInitialized = false
             onInitComplete(false)
+        }
+    }
+
+    fun setLanguage(languageCode: String) {
+        currentLanguageCode = languageCode
+        if (isInitialized) {
+            applyCurrentLanguage()
+        }
+    }
+
+    private fun applyCurrentLanguage() {
+        val appLang = AppLanguage.findByCode(currentLanguageCode)
+        val targetLocale = appLang.locale
+        try {
+            val result = tts?.setLanguage(targetLocale)
+            if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
+                // Try language only without country
+                tts?.setLanguage(Locale(targetLocale.language))
+            }
+
+            // Pick matching voice if available
+            val voices = tts?.voices ?: emptySet()
+            val matchingVoice = voices.firstOrNull {
+                it.locale.language.equals(targetLocale.language, ignoreCase = true) &&
+                        !it.isNetworkConnectionRequired
+            } ?: voices.firstOrNull {
+                it.locale.language.equals(targetLocale.language, ignoreCase = true)
+            }
+
+            if (matchingVoice != null) {
+                tts?.voice = matchingVoice
+                currentVoiceName = matchingVoice.name
+            }
+        } catch (e: Exception) {
+            Log.e("TtsManager", "Error setting language on TTS", e)
         }
     }
 
@@ -101,11 +150,7 @@ class TtsManager(
 
     fun setVoiceByGenderAndAccent(gender: String, accentCode: String) {
         if (!isInitialized) return
-        val targetLocale = when (accentCode) {
-            "en-GB" -> Locale.UK
-            "fr-FR" -> Locale.FRANCE
-            else -> Locale.US
-        }
+        val targetLocale = AppLanguage.findByCode(accentCode).locale
         val voices = tts?.voices?.filter { it.locale.language == targetLocale.language } ?: emptyList()
         val isTargetFemale = gender.equals("female", ignoreCase = true)
         val selected = voices.firstOrNull { voice ->
@@ -121,23 +166,32 @@ class TtsManager(
             tts?.voice = selected
             currentVoiceName = selected.name
         } else {
-            tts?.language = targetLocale
+            tts?.setLanguage(targetLocale)
         }
     }
 
     fun speak(text: String) {
-        if (!isInitialized) return
-        stop()
-
-        // Clean text of markdown, asterisks, bullet points so it flows naturally orally
         val cleanOralText = text
             .replace(Regex("[*#_`~]"), "")
             .replace(Regex("\\[.*?\\]"), "")
-            .replace(Regex("- "), "")
+            .replace(Regex("(?m)^[-*•]\\s+"), "")
             .trim()
 
-        val utteranceId = "code_utterance_${System.currentTimeMillis()}"
-        tts?.speak(cleanOralText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        if (cleanOralText.isBlank()) return
+
+        if (!isInitialized) {
+            pendingSpeechText = cleanOralText
+            return
+        }
+
+        stop()
+        val utteranceId = "lilian_utterance_${System.currentTimeMillis()}"
+        val res = tts?.speak(cleanOralText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        if (res == TextToSpeech.SUCCESS) {
+            onSpeakingStateChanged(true)
+        } else {
+            Log.e("TtsManager", "TTS speak returned error code: $res")
+        }
     }
 
     fun stop() {

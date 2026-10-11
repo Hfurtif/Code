@@ -20,7 +20,13 @@ data class UserProfile(
     val correctionFrequency: String = "normal", // often, normal, rare
     val explanationLang: String = "fr", // fr, en
     val hasCompletedOnboarding: Boolean = true,
-    val dailyReminderEnabled: Boolean = false
+    val dailyReminderEnabled: Boolean = false,
+    val hasDownloadedInitialPack: Boolean = false,
+    val preferredLanguageCode: String = "fr-FR",
+    val preferredLanguageName: String = "Français",
+    val activeRole: String = "friend", // "friend", "english_teacher", "math_teacher", "custom_learner"
+    val hasSelectedInitialLanguage: Boolean = false,
+    val maxStorageLimitGb: Double = 20.0
 )
 
 @Entity(tableName = "conversations")
@@ -90,3 +96,33 @@ data class PendingTask(
     val isResolved: Boolean = false,
     val resolvedAnswer: String? = null
 )
+
+@Entity(tableName = "downloaded_knowledge")
+data class DownloadedKnowledge(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val topic: String,
+    val category: String, // Sciences, Histoire, Tech, Société, Psychologie, Langues, Culture
+    val summary: String,
+    val detailedContent: String,
+    val keyPoints: String,
+    val sampleQuestions: String,
+    val downloadDate: Long = System.currentTimeMillis(),
+    val sizeMb: Double = 1.8,
+    val isAvailableOffline: Boolean = true
+)
+
+@Entity(tableName = "downloaded_documents")
+data class DownloadedDocument(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val title: String,
+    val authorOrSource: String = "Recherche Web & Synthèse Code",
+    val topicCategory: String, // Sciences, Histoire, Tech, Société, Psychologie, Guide
+    val summary: String,
+    val fullTextContent: String,
+    val keywords: String,
+    val downloadDate: Long = System.currentTimeMillis(),
+    val sizeMb: Double = 3.2,
+    val isAvailableOffline: Boolean = true
+)
+
+

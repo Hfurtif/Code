@@ -93,7 +93,7 @@ fun ProgressScreen(
             color = TextPrimary
         )
         Text(
-            text = "Code mémorise chaque leçon pour mesurer ton évolution",
+            text = "Lilian mémorise chaque apprentissage pour mesurer ton évolution",
             fontSize = 13.sp,
             color = TextSecondary
         )

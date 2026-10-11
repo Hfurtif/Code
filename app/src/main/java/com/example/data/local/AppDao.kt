@@ -6,12 +6,15 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.example.data.model.ConversationMessage
+import com.example.data.model.DownloadedDocument
+import com.example.data.model.DownloadedKnowledge
 import com.example.data.model.LearnedError
 import com.example.data.model.Lesson
 import com.example.data.model.PendingTask
 import com.example.data.model.ResourcePack
 import com.example.data.model.UserProfile
 import com.example.data.model.Vocabulary
+import androidx.room.Delete
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -112,3 +115,56 @@ interface PendingTaskDao {
     @Update
     suspend fun updateTask(task: PendingTask)
 }
+
+@Dao
+interface KnowledgeDao {
+    @Query("SELECT * FROM downloaded_knowledge ORDER BY downloadDate DESC")
+    fun getAllKnowledge(): Flow<List<DownloadedKnowledge>>
+
+    @Query("SELECT * FROM downloaded_knowledge WHERE topic LIKE '%' || :query || '%' LIMIT 1")
+    suspend fun findMatchingByTopic(query: String): DownloadedKnowledge?
+
+    @Query("SELECT * FROM downloaded_knowledge WHERE topic LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%' OR detailedContent LIKE '%' || :query || '%' LIMIT 1")
+    suspend fun findMatchingKnowledge(query: String): DownloadedKnowledge?
+
+    @Query("SELECT * FROM downloaded_knowledge WHERE topic LIKE '%' || :query || '%' OR category LIKE '%' || :query || '%' OR detailedContent LIKE '%' || :query || '%' OR keyPoints LIKE '%' || :query || '%'")
+    suspend fun searchKnowledgeList(query: String): List<DownloadedKnowledge>
+
+    @Query("SELECT * FROM downloaded_knowledge WHERE id = :id LIMIT 1")
+    suspend fun getKnowledgeById(id: Long): DownloadedKnowledge?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertKnowledge(knowledge: DownloadedKnowledge): Long
+
+    @Delete
+    suspend fun deleteKnowledge(knowledge: DownloadedKnowledge)
+
+    @Query("DELETE FROM downloaded_knowledge WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+@Dao
+interface DocumentDao {
+    @Query("SELECT * FROM downloaded_documents ORDER BY downloadDate DESC")
+    fun getAllDocuments(): Flow<List<DownloadedDocument>>
+
+    @Query("SELECT * FROM downloaded_documents WHERE title LIKE '%' || :query || '%' LIMIT 1")
+    suspend fun findMatchingByTitle(query: String): DownloadedDocument?
+
+    @Query("SELECT * FROM downloaded_documents WHERE title LIKE '%' || :query || '%' OR fullTextContent LIKE '%' || :query || '%' OR keywords LIKE '%' || :query || '%'")
+    suspend fun searchDocuments(query: String): List<DownloadedDocument>
+
+    @Query("SELECT * FROM downloaded_documents WHERE id = :id LIMIT 1")
+    suspend fun getDocumentById(id: Long): DownloadedDocument?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertDocument(document: DownloadedDocument): Long
+
+    @Delete
+    suspend fun deleteDocument(document: DownloadedDocument)
+
+    @Query("DELETE FROM downloaded_documents WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+

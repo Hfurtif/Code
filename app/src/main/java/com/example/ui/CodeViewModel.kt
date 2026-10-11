@@ -57,8 +57,11 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentCorrectionNote = MutableStateFlow<String?>(null)
     val currentCorrectionNote: StateFlow<String?> = _currentCorrectionNote.asStateFlow()
 
-    private val _selectedMode = MutableStateFlow(TutorMode.ENGLISH)
+    private val _selectedMode = MutableStateFlow(TutorMode.FRIEND)
     val selectedMode: StateFlow<TutorMode> = _selectedMode.asStateFlow()
+
+    private val _isLanguageDialogVisible = MutableStateFlow(false)
+    val isLanguageDialogVisible: StateFlow<Boolean> = _isLanguageDialogVisible.asStateFlow()
 
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
@@ -107,11 +110,28 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     val pendingTasks: StateFlow<List<PendingTask>> = database.pendingTaskDao().getUnresolvedTasks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val allKnowledge: StateFlow<List<com.example.data.model.DownloadedKnowledge>> = database.knowledgeDao().getAllKnowledge()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val allDocuments: StateFlow<List<com.example.data.model.DownloadedDocument>> = brain.repository.allDocumentsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     init {
         // Initial online check
         _isOnline.value = brain.isOnline()
         if (!_isOnline.value) {
             _orbState.value = OrbState.OFFLINE
+        }
+
+        // Initial auto-boot download for offline readiness from day one
+        viewModelScope.launch {
+            brain.repository.initializeBootPackIfNeeded { progress, step ->
+                if (progress < 1.0f) {
+                    _activeLessonPrep.value = "$step (${(progress * 100).toInt()}%)"
+                } else {
+                    _activeLessonPrep.value = null
+                }
+            }
         }
 
         // Initialize Speech Manager
@@ -202,12 +222,55 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun applyVoicePreferences() {
         val profile = userProfile.value
+        ttsManager?.setLanguage(profile.preferredLanguageCode)
         ttsManager?.setSpeechRate(profile.speechRate)
         ttsManager?.setSpeechPitch(profile.speechPitch)
         if (profile.voiceId.isNotBlank()) {
             ttsManager?.setVoiceByName(profile.voiceId)
         } else {
-            ttsManager?.setVoiceByGenderAndAccent(profile.voiceGender, profile.voiceAccent)
+            ttsManager?.setVoiceByGenderAndAccent(profile.voiceGender, profile.preferredLanguageCode)
+        }
+    }
+
+    fun showLanguageDialog() {
+        _isLanguageDialogVisible.value = true
+    }
+
+    fun hideLanguageDialog() {
+        _isLanguageDialogVisible.value = false
+    }
+
+    fun selectLanguage(language: com.example.data.model.AppLanguage) {
+        viewModelScope.launch {
+            val updated = userProfile.value.copy(
+                preferredLanguageCode = language.code,
+                preferredLanguageName = language.displayName,
+                voiceAccent = language.code,
+                hasSelectedInitialLanguage = true
+            )
+            database.userDao().insertOrUpdate(updated)
+            ttsManager?.setLanguage(language.code)
+            _isLanguageDialogVisible.value = false
+            _liveCodeReply.value = language.defaultGreeting
+            _statusText.value = "Prêt (${language.displayName})"
+            speak(language.defaultGreeting)
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = language.defaultGreeting,
+                    mode = _selectedMode.value.name
+                )
+            )
+        }
+    }
+
+    fun expandStorage(amountGb: Double = 20.0) {
+        viewModelScope.launch {
+            val newLimit = userProfile.value.maxStorageLimitGb + amountGb
+            database.userDao().insertOrUpdate(userProfile.value.copy(maxStorageLimitGb = newLimit))
+            val msg = "Capacité de stockage étendue à ${newLimit.toInt()} Go sur ton portable !"
+            _infoBannerMessage.value = msg
+            speak(msg)
         }
     }
 
@@ -216,7 +279,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             stopSpeaking()
         }
         _isOnline.value = brain.isOnline()
-        val lang = if (_selectedMode.value == TutorMode.ENGLISH) "en-US" else "fr-FR"
+        val lang = if (_selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else userProfile.value.preferredLanguageCode
         _statusText.value = "Je t'écoute…"
         _orbState.value = OrbState.LISTENING
         speechManager?.startListening(lang)
@@ -277,6 +340,11 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 recentMessages = allMessages.value
             )
 
+            // Check if mode switch was requested by speech
+            if (response.newMode != null) {
+                _selectedMode.value = response.newMode
+            }
+
             // Save Code reply to DB
             val codeMsg = ConversationMessage(
                 role = "code",
@@ -298,6 +366,11 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                     updateVoiceSettings(userProfile.value.voiceGender, userProfile.value.voiceAccent, newRate, userProfile.value.speechPitch, userProfile.value.voiceId)
                     speak(response.replyText)
                 }
+                "faster" -> {
+                    val newRate = (userProfile.value.speechRate + 0.15f).coerceAtMost(1.4f)
+                    updateVoiceSettings(userProfile.value.voiceGender, userProfile.value.voiceAccent, newRate, userProfile.value.speechPitch, userProfile.value.voiceId)
+                    speak(response.replyText)
+                }
                 "voice_female" -> {
                     updateVoiceSettings("female", userProfile.value.voiceAccent, userProfile.value.speechRate, userProfile.value.speechPitch, "")
                     speak(response.replyText)
@@ -305,6 +378,10 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 "voice_male" -> {
                     updateVoiceSettings("male", userProfile.value.voiceAccent, userProfile.value.speechRate, userProfile.value.speechPitch, "")
                     speak(response.replyText)
+                }
+                "expand_storage_20gb" -> {
+                    speak(response.replyText)
+                    _infoBannerMessage.value = "Capacité de stockage étendue de +20 Go avec ton autorisation !"
                 }
                 "storage_cleanup_prompt" -> {
                     val candidate = allResources.value.firstOrNull { it.isDownloaded && !it.isProtected }
@@ -443,6 +520,74 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun downloadNewKnowledge(topic: String) {
+        if (topic.isBlank()) return
+        viewModelScope.launch {
+            if (_isOnline.value) {
+                _activeLessonPrep.value = "Recherche et téléchargement du cours sur $topic…"
+                _orbState.value = OrbState.THINKING
+                val knowledge = brain.downloadAndSaveKnowledge(topic)
+                _activeLessonPrep.value = null
+                _orbState.value = OrbState.IDLE
+                val msg = "Le cours sur \"${knowledge.topic}\" (${knowledge.category}) a été téléchargé et sauvegardé sur ton portable !"
+                _infoBannerMessage.value = msg
+                _liveCodeReply.value = msg
+                speak(msg)
+            } else {
+                database.pendingTaskDao().insertTask(PendingTask(query = "Télécharger : $topic"))
+                val msg = "Hors ligne : la demande pour \"$topic\" a été mise en attente. Elle sera téléchargée dès ton retour en ligne !"
+                _infoBannerMessage.value = msg
+                speak(msg)
+            }
+        }
+    }
+
+    fun startDiscussionOnKnowledge(knowledge: com.example.data.model.DownloadedKnowledge) {
+        viewModelScope.launch {
+            val text = "Parlons de ${knowledge.topic}. ${knowledge.summary} Que souhaites-tu explorer en premier ?"
+            _liveCodeReply.value = text
+            _statusText.value = "Discussion : ${knowledge.topic}"
+            speak(text)
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = text,
+                    mode = _selectedMode.value.name
+                )
+            )
+        }
+    }
+
+    fun startDiscussionOnDocument(document: com.example.data.model.DownloadedDocument) {
+        viewModelScope.launch {
+            val text = "J'ai ouvert le document \"${document.title}\" (${document.topicCategory}). ${document.summary} Que veux-tu qu'on approfondisse ensemble ?"
+            _liveCodeReply.value = text
+            _statusText.value = "Document : ${document.title}"
+            speak(text)
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = text,
+                    mode = _selectedMode.value.name
+                )
+            )
+        }
+    }
+
+    fun deleteDocument(document: com.example.data.model.DownloadedDocument) {
+        viewModelScope.launch {
+            brain.repository.deleteDocument(document)
+            _infoBannerMessage.value = "Le document \"${document.title}\" a été supprimé (${document.sizeMb} Mo libérés)."
+        }
+    }
+
+    fun deleteKnowledge(knowledge: com.example.data.model.DownloadedKnowledge) {
+        viewModelScope.launch {
+            brain.repository.deleteKnowledge(knowledge)
+            _infoBannerMessage.value = "Le cours \"${knowledge.topic}\" a été supprimé (${knowledge.sizeMb} Mo libérés)."
+        }
+    }
+
     fun clearAllHistory() {
         viewModelScope.launch {
             database.conversationDao().clearHistory()
@@ -452,13 +597,50 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    private suspend fun resolvePendingTasksIfAny() {
-        val tasks = database.pendingTaskDao().getUnresolvedTasks()
-        // Handle pending items
+    fun syncAllPendingTasks() {
+        viewModelScope.launch {
+            _isOnline.value = brain.isOnline()
+            if (!_isOnline.value) {
+                _infoBannerMessage.value = "Tu es actuellement hors ligne. Connecte-toi à Internet pour synchroniser les recherches."
+                return@launch
+            }
+            val count = pendingTasks.value.size
+            if (count == 0) {
+                _infoBannerMessage.value = "Aucune tâche en attente."
+                return@launch
+            }
+            _activeLessonPrep.value = "Téléchargement de $count recherche(s) en attente…"
+            resolvePendingTasksIfAny()
+            _activeLessonPrep.value = null
+            val msg = "Toutes les recherches et documents en attente ont été téléchargés et enregistrés sur ton téléphone !"
+            _infoBannerMessage.value = msg
+            speak(msg)
+        }
+    }
+
+    fun deletePendingTask(task: PendingTask) {
+        viewModelScope.launch {
+            database.pendingTaskDao().updateTask(task.copy(isResolved = true, resolvedAnswer = "Annulé par l'utilisateur"))
+            _infoBannerMessage.value = "Demande retirée de la liste."
+        }
+    }
+
+    suspend fun resolvePendingTasksIfAny() {
         val list = pendingTasks.value
         for (task in list) {
+            val topic = if (task.query.startsWith("Télécharger :")) {
+                task.query.removePrefix("Télécharger :").trim()
+            } else if (task.query.startsWith("Rechercher et télécharger :")) {
+                task.query.removePrefix("Rechercher et télécharger :").trim()
+            } else {
+                task.query.trim()
+            }
+            if (topic.isNotBlank()) {
+                brain.downloadAndSaveKnowledge(topic)
+                _infoBannerMessage.value = "Connexion rétablie : les recherches et documents sur \"$topic\" ont été téléchargés avec succès !"
+            }
             database.pendingTaskDao().updateTask(
-                task.copy(isResolved = true, resolvedAnswer = "Traité en ligne")
+                task.copy(isResolved = true, resolvedAnswer = "Téléchargé et stocké en local")
             )
         }
     }

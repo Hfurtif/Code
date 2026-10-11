@@ -12,28 +12,28 @@ enum class TutorMode(
     val accentColor: Color,
     val iconName: String
 ) {
-    ENGLISH(
-        title = "Professeur d'anglais",
-        subtitle = "Conversation, grammaire & corrections en direct",
+    FRIEND(
+        title = "Ami omniscient",
+        subtitle = "Ton ami qui sait tout, disponible en ligne et hors ligne",
         accentColor = NeonCyan,
+        iconName = "ChatBubble"
+    ),
+    ENGLISH_TEACHER(
+        title = "Professeur d'anglais",
+        subtitle = "Activé à ta demande pour pratiquer et apprendre l'anglais",
+        accentColor = ElectricBlue,
         iconName = "Language"
     ),
-    PERSONAL_GROWTH(
-        title = "Développement personnel",
-        subtitle = "Habitudes, motivation, organisation & défis",
+    MATH_TEACHER(
+        title = "Professeur de mathématiques",
+        subtitle = "Activé à ta demande pour les mathématiques et calculs",
         accentColor = NeonViolet,
-        iconName = "EmojiEvents"
+        iconName = "Calculate"
     ),
-    PSYCHOLOGY(
-        title = "Psychologie & Communication",
-        subtitle = "Écoute active, émotions & conversations clés",
-        accentColor = ElectricBlue,
-        iconName = "Psychology"
-    ),
-    FREE_DISCUSSION(
-        title = "Discussion libre",
-        subtitle = "Tout sujet, échange spontané sans contrainte",
+    CUSTOM_TEACHER(
+        title = "Professeur particulier",
+        subtitle = "Activé pour t'enseigner tout sujet que tu demandes",
         accentColor = AlertPink,
-        iconName = "ChatBubble"
+        iconName = "School"
     )
 }

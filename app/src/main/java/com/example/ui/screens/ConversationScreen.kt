@@ -33,6 +33,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Replay
@@ -50,6 +51,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -107,6 +109,7 @@ fun ConversationScreen(
     val lessonPrep by viewModel.activeLessonPrep.collectAsState()
     val storagePromptResource by viewModel.storagePromptResource.collectAsState()
     val allMessages by viewModel.allMessages.collectAsState()
+    val pendingTasks by viewModel.pendingTasks.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     val historyListState = rememberLazyListState()
@@ -138,7 +141,7 @@ fun ConversationScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "CODE",
+                        text = "LILIAN",
                         color = NeonCyan,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Black,
@@ -146,40 +149,73 @@ fun ConversationScreen(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "VOICE AI",
+                        text = "AMI OMNISCIENT",
                         color = NeonViolet,
-                        fontSize = 11.sp,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     )
                 }
 
-                // Online/Offline Status Pill
-                Surface(
-                    color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isOnline) SuccessGreen.copy(alpha = 0.5f) else OfflineAmber
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Language Switcher Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showLanguageDialog() }
+                            .padding(end = 6.dp)
+                            .testTag("top_language_switcher_button"),
+                        color = DarkSurfaceVariant,
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.FiberManualRecord,
-                            contentDescription = null,
-                            tint = if (isOnline) SuccessGreen else OfflineAmber,
-                            modifier = Modifier.size(10.dp)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Language,
+                                contentDescription = "Changer la langue",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Langue",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+
+                    // Online/Offline Status Pill
+                    Surface(
+                        color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isOnline) SuccessGreen.copy(alpha = 0.5f) else OfflineAmber
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = if (isOnline) "En ligne" else "Hors ligne",
-                            color = if (isOnline) TextPrimary else OfflineAmber,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FiberManualRecord,
+                                contentDescription = null,
+                                tint = if (isOnline) SuccessGreen else OfflineAmber,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (isOnline) "En ligne" else "Hors ligne",
+                                color = if (isOnline) TextPrimary else OfflineAmber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
@@ -212,6 +248,77 @@ fun ConversationScreen(
                             fontSize = 12.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+
+            // Pending tasks banner if any requests are waiting for internet
+            if (pendingTasks.isNotEmpty()) {
+                Surface(
+                    color = OfflineAmber.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.6f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "⏳ ${pendingTasks.size} recherche(s) en attente d'Internet",
+                            color = OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        if (isOnline) {
+                            TextButton(
+                                onClick = { viewModel.syncAllPendingTasks() },
+                                modifier = Modifier.padding(0.dp)
+                            ) {
+                                Text("Télécharger", color = SuccessGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Quick Knowledge / Download prompt chips
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(bottom = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                val quickIdeas = listOf(
+                    "📚 Télécharge un cours sur les trous noirs",
+                    "🚀 Parle-moi des trous noirs",
+                    "🏛 Raconte-moi l'histoire de Rome",
+                    "🧠 C'est quoi un biais cognitif ?",
+                    "💼 Donne-moi un cours d'anglais",
+                    "🧘 Comment gérer le stress ?",
+                    "🤖 Télécharge un cours sur l'IA"
+                )
+                quickIdeas.forEach { idea ->
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { viewModel.processInput(idea) },
+                        color = DarkSurfaceVariant.copy(alpha = 0.8f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text(
+                            text = idea,
+                            color = TextSecondary,
+                            fontSize = 10.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
@@ -271,7 +378,7 @@ fun ConversationScreen(
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
                                             Text(
-                                                text = if (isUser) "Toi" else "Code",
+                                                text = if (isUser) "Toi" else "Lilian",
                                                 color = if (isUser) NeonCyan else NeonViolet,
                                                 fontSize = 10.sp,
                                                 fontWeight = FontWeight.Bold
@@ -427,7 +534,7 @@ fun ConversationScreen(
                                 }
                             } else if (liveTranscript.isBlank()) {
                                 Text(
-                                    text = "« Dis simplement 'Hello Code' ou pose une question en anglais… »",
+                                    text = "« Parle librement à Lilian ou demande-lui d'apprendre ce que tu veux… »",
                                     color = TextMuted,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
@@ -552,7 +659,7 @@ fun ConversationScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
-                            contentDescription = "Interrompre Code",
+                            contentDescription = "Interrompre Lilian",
                             tint = if (isSpeaking) AlertPink else TextMuted
                         )
                     }

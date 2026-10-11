@@ -99,7 +99,7 @@ fun LevelTestDialog(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = "Félicitations ! Code adaptera ses leçons, son vocabulaire et la complexité des phrases à ce niveau.",
+                        text = "Félicitations ! Lilian adaptera ses enseignements, son vocabulaire et la complexité des phrases à ce niveau.",
                         color = TextSecondary,
                         fontSize = 12.sp,
                         textAlign = androidx.compose.ui.text.style.TextAlign.Center

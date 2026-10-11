@@ -90,7 +90,7 @@ fun SettingsScreen(
             color = TextPrimary
         )
         Text(
-            text = "Personnalise la voix, le rythme et la pédagogie de Code",
+            text = "Personnalise la voix, le rythme et la mémoire de Lilian",
             fontSize = 13.sp,
             color = TextSecondary
         )
@@ -249,7 +249,7 @@ fun SettingsScreen(
                         // Sample Voice Audio Preview Button
                         Button(
                             onClick = {
-                                viewModel.speak("Hello! I am Code, your personal voice teacher. Let's make great progress together!")
+                                viewModel.speak("Bonjour ! Je suis Lilian, ton ami omniscient. Discutons de ce qui te passionne !")
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(12.dp),
@@ -287,7 +287,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Le micro se réactive automatiquement après chaque réponse de Code, comme au téléphone.",
+                                text = "Le micro se réactive automatiquement après chaque réponse de Lilian, comme au téléphone.",
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp
@@ -416,7 +416,7 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Code fonctionne directement sur ton téléphone. Tes conversations, ton niveau et tes leçons sont stockés exclusivement dans la mémoire locale de ton appareil. Aucun compte requis, aucune donnée personnelle collectée.",
+                            text = "Lilian fonctionne directement sur ton téléphone. Tes conversations, tes connaissances et tes cours sont stockés exclusivement dans la mémoire locale de ton appareil. Aucun compte requis, aucune donnée personnelle collectée.",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 17.sp

@@ -1,6 +1,6 @@
 {
-  "name": "Code",
-  "description": "Assistant vocal IA et professeur personnel pour apprendre l'anglais et se développer",
+  "name": "Lilian",
+  "description": "Lilian - Ami omniscient et compagnon personnel vocal tout-en-un, capable d'apprendre et de tout enseigner hors ligne",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }
