@@ -36,6 +36,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
@@ -110,6 +111,7 @@ fun ConversationScreen(
     val storagePromptResource by viewModel.storagePromptResource.collectAsState()
     val allMessages by viewModel.allMessages.collectAsState()
     val pendingTasks by viewModel.pendingTasks.collectAsState()
+    val isWebSearching by viewModel.isWebSearching.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     val historyListState = rememberLazyListState()
@@ -158,6 +160,37 @@ fun ConversationScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Web Search Trigger Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showWebSearchDialog() }
+                            .padding(end = 6.dp)
+                            .testTag("top_web_search_button"),
+                        color = ElectricBlue.copy(alpha = 0.25f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Public,
+                                contentDescription = "Recherche Web",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Recherche Web",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+
                     // Language Switcher Button
                     Surface(
                         modifier = Modifier
@@ -297,13 +330,14 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val quickIdeas = listOf(
-                    "📚 Télécharge un cours sur les trous noirs",
-                    "🚀 Parle-moi des trous noirs",
+                    "🌐 Recherche le télescope James Webb",
+                    "🔍 Recherche l'intelligence artificielle",
+                    "🌌 Parle-moi des trous noirs",
+                    "🌍 C'est quoi le réchauffement climatique ?",
                     "🏛 Raconte-moi l'histoire de Rome",
+                    "⚡ Explique-moi la relativité d'Einstein",
                     "🧠 C'est quoi un biais cognitif ?",
-                    "💼 Donne-moi un cours d'anglais",
-                    "🧘 Comment gérer le stress ?",
-                    "🤖 Télécharge un cours sur l'IA"
+                    "📚 Télécharge un cours sur l'astronomie"
                 )
                 quickIdeas.forEach { idea ->
                     Surface(
@@ -377,12 +411,44 @@ fun ConversationScreen(
                                         modifier = Modifier.fillMaxWidth(0.85f)
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
-                                            Text(
-                                                text = if (isUser) "Toi" else "Lilian",
-                                                color = if (isUser) NeonCyan else NeonViolet,
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold
-                                            )
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = if (isUser) "Toi" else "Lilian",
+                                                    color = if (isUser) NeonCyan else NeonViolet,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                                if (!isUser && msg.isWebSearch) {
+                                                    Surface(
+                                                        color = ElectricBlue.copy(alpha = 0.25f),
+                                                        shape = RoundedCornerShape(6.dp),
+                                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Public,
+                                                                contentDescription = null,
+                                                                tint = NeonCyan,
+                                                                modifier = Modifier.size(10.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(3.dp))
+                                                            Text(
+                                                                text = msg.webSearchTopic ?: "Recherche Web",
+                                                                color = NeonCyan,
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.SemiBold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Text(
                                                 text = msg.text,
@@ -469,6 +535,51 @@ fun ConversationScreen(
                                         trackColor = DarkSurfaceVariant
                                     )
                                 }
+                            }
+                        }
+                    }
+
+                    // Live Web Searching Banner (if actively querying the Internet)
+                    AnimatedVisibility(
+                        visible = isWebSearching,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        GlassCard(
+                            modifier = Modifier
+                                .fillMaxWidth(0.92f)
+                                .padding(vertical = 4.dp),
+                            cornerRadius = 14.dp,
+                            borderColor = NeonCyan
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        imageVector = Icons.Default.Public,
+                                        contentDescription = null,
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "Recherche en direct sur Internet en cours…",
+                                        color = NeonCyan,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Lilian explore les sources du Web pour t'informer et mémoriser le sujet.",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                LinearProgressIndicator(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    color = NeonCyan,
+                                    trackColor = DarkSurfaceVariant
+                                )
                             }
                         }
                     }
@@ -717,10 +828,28 @@ fun ConversationScreen(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    IconButton(
+                        onClick = { viewModel.showWebSearchDialog() },
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(CircleShape)
+                            .background(ElectricBlue.copy(alpha = 0.2f))
+                            .border(1.dp, NeonCyan.copy(alpha = 0.5f), CircleShape)
+                            .testTag("open_web_search_input_button")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = "Recherche Web",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+
                     OutlinedTextField(
                         value = textInput,
                         onValueChange = { textInput = it },
-                        placeholder = { Text("Écris ici si tu préfères taper…", color = TextMuted, fontSize = 12.sp) },
+                        placeholder = { Text("Écris ou recherche…", color = TextMuted, fontSize = 12.sp) },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("chat_text_input"),

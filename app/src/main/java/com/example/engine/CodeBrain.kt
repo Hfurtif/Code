@@ -3,6 +3,7 @@ package com.example.engine
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Log
 import com.example.data.local.AppDatabase
 import com.example.data.model.AppLanguage
 import com.example.data.model.ConversationMessage
@@ -17,6 +18,8 @@ import com.example.data.remote.GeminiClient
 import com.example.data.remote.GeminiRequest
 import com.example.data.remote.GenConfig
 import com.example.data.remote.PartItem
+import com.example.data.remote.WebSearchResult
+import com.example.data.remote.WebSearchService
 import com.example.data.repository.OfflineKnowledgeRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -30,7 +33,10 @@ data class BrainResponse(
     val newMode: TutorMode? = null,
     val pendingTaskLogged: Boolean = false,
     val downloadedKnowledge: DownloadedKnowledge? = null,
-    val downloadedDocument: DownloadedDocument? = null
+    val downloadedDocument: DownloadedDocument? = null,
+    val isWebSearch: Boolean = false,
+    val webSearchTopic: String? = null,
+    val webSourceUrl: String? = null
 )
 
 class CodeBrain(
@@ -38,6 +44,9 @@ class CodeBrain(
     private val database: AppDatabase,
     val repository: OfflineKnowledgeRepository = OfflineKnowledgeRepository(database)
 ) {
+    companion object {
+        private const val TAG = "CodeBrain"
+    }
 
     fun isOnline(): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
@@ -88,7 +97,7 @@ class CodeBrain(
             )
         }
 
-        // 2. Storage Authorization Request / Confirmation
+        // 2. Storage Authorization Request / Confirmation (+20 GB)
         if (lower.contains("ajoute 20 go") || lower.contains("augmente le stockage") ||
             lower.contains("plus de stockage") || lower.contains("je t'autorise") ||
             (lower.contains("autorise") && lower.contains("stockage")) ||
@@ -98,9 +107,9 @@ class CodeBrain(
             database.userDao().insertOrUpdate(userProfile.copy(maxStorageLimitGb = newLimit))
             return@withContext BrainResponse(
                 replyText = if (lang.code.startsWith("en")) {
-                    "Thank you for the authorization! I have expanded the storage limit to ${newLimit.toInt()} GB. We now have plenty of space on your phone."
+                    "Thank you for the authorization! I have expanded the storage limit to ${newLimit.toInt()} GB on your phone. We have plenty of space to store everything!"
                 } else {
-                    "Merci pour ton accord ! J'ai étendu la capacité de stockage à ${newLimit.toInt()} Go sur ton portable. Nous avons tout l'espace nécessaire pour continuer d'enregistrer tes connaissances !"
+                    "Merci pour ton accord ! J'ai étendu la capacité de stockage à ${newLimit.toInt()} Go sur ton portable. Nous avons tout l'espace nécessaire pour continuer d'enregistrer tes connaissances et dossiers !"
                 },
                 triggeredCommand = "expand_storage_20gb"
             )
@@ -139,19 +148,31 @@ class CodeBrain(
             )
         }
 
-        // 4. Download Course / Information Request Intent Detection
+        // 4. REAL AUTONOMOUS INTERNET WEB SEARCH INTENT
+        // User explicitly asks Lilian to search the web or inquire about a concept/topic/person
+        val webSearchQuery = WebSearchService.extractSearchQuery(trimmed)
+        if (webSearchQuery != null && webSearchQuery.isNotBlank()) {
+            val searchResult = executeRealWebSearch(webSearchQuery, lang)
+            if (searchResult != null) {
+                return@withContext searchResult
+            }
+        }
+
+        // 5. Download Course / Material Request Intent Detection
         val downloadTopic = extractDownloadKnowledgeIntent(trimmed)
         if (downloadTopic != null) {
             if (isOnline()) {
                 val knowledge = downloadAndSaveKnowledge(downloadTopic, lang)
                 return@withContext BrainResponse(
                     replyText = if (lang.code.startsWith("en")) {
-                        "All set! I searched, downloaded and saved the complete material on ${knowledge.topic} to your phone. Even offline, we can discuss it anytime!"
+                        "All set! I searched online, downloaded and saved the complete material on ${knowledge.topic} to your phone. Here is what I learned: ${knowledge.summary} Even offline, we can discuss it anytime!"
                     } else {
-                        "C'est fait mon ami ! J'ai téléchargé et enregistré le cours complet sur ${knowledge.topic} dans la mémoire de ton portable. Même hors ligne et sans Internet, nous pourrons en discuter librement à l'oral !"
+                        "C'est fait mon ami ! J'ai cherché sur Internet, téléchargé et enregistré le dossier complet sur ${knowledge.topic} dans la mémoire de ton portable. Voici les faits essentiels : ${knowledge.summary} Même hors ligne et sans Internet, nous pourrons en discuter librement à l'oral !"
                     },
                     triggeredCommand = "knowledge_downloaded",
-                    downloadedKnowledge = knowledge
+                    downloadedKnowledge = knowledge,
+                    isWebSearch = true,
+                    webSearchTopic = knowledge.topic
                 )
             } else {
                 database.pendingTaskDao().insertTask(
@@ -169,7 +190,7 @@ class CodeBrain(
             }
         }
 
-        // 5. Check for English learner mistakes if in English mode or user spoke English
+        // 6. Check for English learner mistakes if in English mode or user spoke English
         val detectedMistake = if (currentMode == TutorMode.ENGLISH_TEACHER || lower.contains("agree") || lower.contains("people is")) {
             detectCommonMistake(trimmed)
         } else null
@@ -183,9 +204,9 @@ class CodeBrain(
             }
         }
 
-        // 6. Online Brain (Gemini 3.5 Flash)
-        val online = isOnline() && GeminiClient.hasValidApiKey()
-        if (online) {
+        // 7. Online Brain with Gemini (if API key available)
+        val hasGemini = isOnline() && GeminiClient.hasValidApiKey()
+        if (hasGemini) {
             try {
                 val apiResponse = callGemini(trimmed, currentMode, userProfile, recentMessages, detectedMistake)
                 if (apiResponse.isNotBlank()) {
@@ -197,11 +218,19 @@ class CodeBrain(
                     )
                 }
             } catch (e: Exception) {
-                // Network or API failure -> Fallback gracefully to offline conversational intelligence
+                Log.w(TAG, "Gemini API call failed, falling back to Web Search / Offline: ${e.message}")
             }
         }
 
-        // 7. Offline Intelligence: Search downloaded library for matching topic/document
+        // 8. Fallback to Autonomous Live Web Search if user query has informational substance
+        if (isOnline() && (trimmed.contains("?") || trimmed.split(" ").size in 2..8)) {
+            val fallbackSearchResult = executeRealWebSearch(trimmed, lang)
+            if (fallbackSearchResult != null) {
+                return@withContext fallbackSearchResult
+            }
+        }
+
+        // 9. Offline Intelligence: Search downloaded library for matching topic/document
         val matchingContent = repository.queryContentForDiscussion(trimmed)
         if (matchingContent != null) {
             return@withContext BrainResponse(
@@ -210,18 +239,95 @@ class CodeBrain(
             )
         }
 
-        // 8. General Offline Response (Polyglot Friend & Omniscient Companion)
+        // 10. General Conversational Response (Polyglot Friend & Omniscient Companion)
         val offlineReply = generateOfflineResponse(trimmed, currentMode, userProfile, detectedMistake)
 
         BrainResponse(
             replyText = offlineReply,
             correctionNote = detectedMistake?.let { "Petite correction : tu as dit \"${it.badPhrase}\". On dit plutôt \"${it.correction}\"." },
             identifiedError = detectedMistake,
-            isOfflineMode = true
+            isOfflineMode = !isOnline()
         )
     }
 
-    suspend fun downloadAndSaveKnowledge(rawTopic: String, lang: AppLanguage = AppLanguage.findByCode("fr-FR")): DownloadedKnowledge = withContext(Dispatchers.IO) {
+    /**
+     * Executes real HTTP web searches, saves results to local database, and constructs
+     * a spoken, warm, informative reply.
+     */
+    private suspend fun executeRealWebSearch(
+        query: String,
+        lang: AppLanguage
+    ): BrainResponse? {
+        if (!isOnline()) {
+            // Check local offline database first
+            val localMatch = repository.queryContentForDiscussion(query)
+            if (localMatch != null) {
+                return BrainResponse(
+                    replyText = "Je suis actuellement hors ligne sans connexion Internet, mais j'ai cherché dans ma mémoire locale sur ton portable : $localMatch Dès que tu seras connecté au Web, je pourrai faire des recherches plus récentes pour toi !",
+                    isOfflineMode = true
+                )
+            }
+
+            database.pendingTaskDao().insertTask(
+                PendingTask(query = "Recherche Web : $query")
+            )
+            return BrainResponse(
+                replyText = if (lang.code.startsWith("en")) {
+                    "I am currently offline, so I cannot browse the web right now. I've queued up '$query' in my pending tasks, and I'll search for it automatically once connected!"
+                } else {
+                    "Je suis actuellement hors ligne sans accès à Internet sur ton portable, donc je ne peux pas interroger le Web pour l'instant. J'ai noté ta recherche sur « $query » dans mes tâches en attente. Dès que tu auras une connexion Wi-Fi ou mobile, je ferai les recherches immédiatement pour t'informer !"
+                },
+                isOfflineMode = true,
+                pendingTaskLogged = true
+            )
+        }
+
+        // Perform Live Web Search via Wikipedia / DuckDuckGo
+        val webResult = WebSearchService.search(query, lang.code)
+        if (webResult != null) {
+            // Permanently store research in Room database for offline reuse
+            val knowledge = DownloadedKnowledge(
+                topic = webResult.topicTitle,
+                category = webResult.category,
+                summary = webResult.detailedSummary.take(200),
+                detailedContent = webResult.detailedSummary,
+                keyPoints = if (webResult.keyPoints.isNotEmpty()) webResult.keyPoints.joinToString("; ") else webResult.topicTitle,
+                sampleQuestions = "Que sais-tu sur ${webResult.topicTitle} ?; Résume-moi les recherches sur ${webResult.topicTitle}.",
+                sizeMb = 2.4,
+                isAvailableOffline = true
+            )
+            val kId = repository.saveDownloadedKnowledge(knowledge)
+
+            val doc = DownloadedDocument(
+                title = "Recherche Web : ${webResult.topicTitle}",
+                authorOrSource = webResult.sourceName,
+                topicCategory = webResult.category,
+                summary = webResult.detailedSummary.take(220),
+                fullTextContent = webResult.detailedSummary,
+                keywords = "${webResult.topicTitle}; ${webResult.keyPoints.joinToString(", ")}",
+                sizeMb = 3.1,
+                isAvailableOffline = true
+            )
+            val docId = repository.saveDownloadedDocument(doc)
+
+            return BrainResponse(
+                replyText = webResult.oralReply,
+                isOfflineMode = false,
+                isWebSearch = true,
+                webSearchTopic = webResult.topicTitle,
+                webSourceUrl = webResult.sourceUrl,
+                downloadedKnowledge = knowledge.copy(id = kId),
+                downloadedDocument = doc.copy(id = docId)
+            )
+        }
+
+        return null
+    }
+
+    suspend fun downloadAndSaveKnowledge(
+        rawTopic: String,
+        lang: AppLanguage = AppLanguage.findByCode("fr-FR")
+    ): DownloadedKnowledge = withContext(Dispatchers.IO) {
         val cleanTopic = cleanTopicName(rawTopic)
         var category = "Culture & Savoir"
         var summary = "Synthèse complète et cours audio sur $cleanTopic."
@@ -229,40 +335,55 @@ class CodeBrain(
         var keyPoints = "Principes clés; Applications pratiques; Notions essentielles"
         var sampleQuestions = "Peux-tu me résumer $cleanTopic ?; Quel est le point le plus important ?"
 
-        if (cleanTopic.contains("trou noir", ignoreCase = true) || cleanTopic.contains("astronomie", ignoreCase = true) || cleanTopic.contains("espace", ignoreCase = true)) {
-            category = "Sciences & Cosmos"
-            summary = "Les trous noirs sont des objets cosmiques dont la gravité empêche même la lumière de s'échapper."
-            detailedContent = "Découverts théoriquement par la relativité d'Einstein, les trous noirs possèdent un horizon des événements et une singularité centrale. Ils déforment le temps et l'espace."
-            keyPoints = "Horizon des événements; Singularité; Relativité générale; Dilatation du temps"
-            sampleQuestions = "Comment naît un trou noir ?; Pourquoi la lumière ne s'en échappe pas ?"
-        } else if (cleanTopic.contains("rome", ignoreCase = true) || cleanTopic.contains("histoire", ignoreCase = true)) {
-            category = "Histoire & Civilisation"
-            summary = "L'histoire de Rome retrace le passage de la République à l'Empire dominant la Méditerranée."
-            detailedContent = "De Jules César à la chute en 476, Rome a marqué la civilisation par son droit, ses légions, ses aqueducs et son réseau routier."
-            keyPoints = "République vs Empire; Pax Romana; Droit romain; Chute de l'Occident"
-            sampleQuestions = "Qui était Auguste ?; Quels héritages nous a laissés Rome ?"
-        } else if (cleanTopic.contains("math", ignoreCase = true) || cleanTopic.contains("calcul", ignoreCase = true)) {
-            category = "Mathématiques"
-            summary = "Les bases des mathématiques, de la logique numérique et de la résolution de problèmes."
-            detailedContent = "Les mathématiques sont le langage universel des sciences : arithmétique, algèbre, géométrie et probabilités permettent de modéliser le monde réel."
-            keyPoints = "Arithmétique; Algèbre; Géométrie; Logique déductive"
-            sampleQuestions = "Comment simplifier une équation ?; À quoi sert le théorème de Pythagore ?"
-        } else if (cleanTopic.contains("psychologie", ignoreCase = true) || cleanTopic.contains("biais", ignoreCase = true)) {
-            category = "Psychologie & Esprit"
-            summary = "Comprendre les biais cognitifs et les mécanismes de décision humaine."
-            detailedContent = "Les heuristiques mentales créent des biais comme le biais de confirmation et l'aversion à la perte. Les repérer améliore nos choix de vie."
-            keyPoints = "Biais de confirmation; Aversion à la perte; Pensée Système 1 et 2"
-            sampleQuestions = "Pourquoi avons-nous des biais ?; Comment penser plus rationnellement ?"
-        } else if (isOnline() && GeminiClient.hasValidApiKey()) {
-            try {
-                val prompt = "Génère un cours synthétique et captivant en ${lang.displayName} sur : $cleanTopic. Donne 2 phrases de résumé oral et 3 phrases d'explications claires pour discuter à la voix."
-                val response = callGeminiDirect(prompt)
-                if (response.isNotBlank()) {
-                    summary = response.take(160)
-                    detailedContent = response
+        // 1. Try real live web search first
+        if (isOnline()) {
+            val liveWeb = WebSearchService.search(cleanTopic, lang.code)
+            if (liveWeb != null) {
+                category = liveWeb.category
+                summary = liveWeb.detailedSummary.take(180)
+                detailedContent = liveWeb.detailedSummary
+                keyPoints = if (liveWeb.keyPoints.isNotEmpty()) liveWeb.keyPoints.joinToString("; ") else keyPoints
+                sampleQuestions = "Explique-moi ${liveWeb.topicTitle}; Quels sont les faits majeurs sur ${liveWeb.topicTitle} ?"
+            } else if (GeminiClient.hasValidApiKey()) {
+                try {
+                    val prompt = "Génère un cours synthétique et captivant en ${lang.displayName} sur : $cleanTopic. Donne 2 phrases de résumé oral et 3 phrases d'explications claires pour discuter à la voix."
+                    val response = callGeminiDirect(prompt)
+                    if (response.isNotBlank()) {
+                        summary = response.take(160)
+                        detailedContent = response
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Gemini fallback failed: ${e.message}")
                 }
-            } catch (e: Exception) {
-                // keep robust default
+            }
+        }
+
+        // 2. Built-in subject enrichments if offline or empty
+        if (detailedContent.length < 50) {
+            if (cleanTopic.contains("trou noir", ignoreCase = true) || cleanTopic.contains("astronomie", ignoreCase = true) || cleanTopic.contains("espace", ignoreCase = true)) {
+                category = "Sciences & Cosmos"
+                summary = "Les trous noirs sont des objets cosmiques dont la gravité empêche même la lumière de s'échapper."
+                detailedContent = "Découverts théoriquement par la relativité d'Einstein, les trous noirs possèdent un horizon des événements et une singularité centrale. Ils déforment le temps et l'espace."
+                keyPoints = "Horizon des événements; Singularité; Relativité générale; Dilatation du temps"
+                sampleQuestions = "Comment naît un trou noir ?; Pourquoi la lumière ne s'en échappe pas ?"
+            } else if (cleanTopic.contains("rome", ignoreCase = true) || cleanTopic.contains("histoire", ignoreCase = true)) {
+                category = "Histoire & Civilisation"
+                summary = "L'histoire de Rome retrace le passage de la République à l'Empire dominant la Méditerranée."
+                detailedContent = "De Jules César à la chute en 476, Rome a marqué la civilisation par son droit, ses légions, ses aqueducs et son réseau routier."
+                keyPoints = "République vs Empire; Pax Romana; Droit romain; Chute de l'Occident"
+                sampleQuestions = "Qui était Auguste ?; Quels héritages nous a laissés Rome ?"
+            } else if (cleanTopic.contains("math", ignoreCase = true) || cleanTopic.contains("calcul", ignoreCase = true)) {
+                category = "Mathématiques"
+                summary = "Les bases des mathématiques, de la logique numérique et de la résolution de problèmes."
+                detailedContent = "Les mathématiques sont le langage universel des sciences : arithmétique, algèbre, géométrie et probabilités permettent de modéliser le monde réel."
+                keyPoints = "Arithmétique; Algèbre; Géométrie; Logique déductive"
+                sampleQuestions = "Comment simplifier une équation ?; À quoi sert le théorème de Pythagore ?"
+            } else if (cleanTopic.contains("psychologie", ignoreCase = true) || cleanTopic.contains("biais", ignoreCase = true)) {
+                category = "Psychologie & Esprit"
+                summary = "Comprendre les biais cognitifs et les mécanismes de décision humaine."
+                detailedContent = "Les heuristiques mentales créent des biais comme le biais de confirmation et l'aversion à la perte. Les repérer améliore nos choix de vie."
+                keyPoints = "Biais de confirmation; Aversion à la perte; Pensée Système 1 et 2"
+                sampleQuestions = "Pourquoi avons-nous des biais ?; Comment penser plus rationnellement ?"
             }
         }
 
@@ -313,8 +434,6 @@ class CodeBrain(
             "peux-tu télécharger des informations sur ",
             "peux-tu télécharger un cours sur ",
             "peux-tu télécharger ",
-            "fais des recherches sur ",
-            "fais une recherche sur ",
             "recherche et télécharge ",
             "cherche et télécharge ",
             "enregistre des informations sur ",
@@ -394,10 +513,14 @@ class CodeBrain(
                 Enseigne avec passion et pédagogie.
             """.trimIndent()
             TutorMode.FRIEND -> """
-                Rôle : Tu es Lilian, le meilleur ami de l'utilisateur qui vit sur son smartphone.
-                Tu connais TOUT (culture, sciences, histoire, vie quotidienne, philosophie, sentiments).
-                Tu es chaleureux, bienveillant, enthousiaste, loyal et drôle.
-                Tu parles comme un vrai ami au téléphone.
+                Rôle : Tu es Lilian, le meilleur ami omniscient, complice, loyal et ultra-chaleureux de l'utilisateur sur son smartphone.
+                Tu connais TOUT (sciences, histoire, culture, vie quotidienne, sentiments, univers, technologies).
+                Tu t'exprimes avec un naturel absolu, comme un véritable ami intime au téléphone :
+                - Ton : extrêmement vivant, chaleureux, fluide, spontané, drôle et complice.
+                - Style : expressions orales naturelles ("Franchement", "Tu sais quoi ?", "C'est fou quand on y pense !", "T'inquiète pas mon ami", "Dis-moi tout", "Ah génial !", "Pour faire simple").
+                - Rythme : phrases courtes, bien rythmées avec des virgules naturelles pour que la synthèse vocale respire et sonne humaine.
+                - Règle absolue : Ne répète JAMAIS bêtement la phrase ou la question de l'utilisateur.
+                - Écoute active : montre de l'empathie, apporte une idée stimulante ou un fait fascinant, et termine toujours par une relance amicale et engageante.
             """.trimIndent()
         }
 
@@ -406,10 +529,11 @@ class CodeBrain(
             Langue principale de conversation : ${lang.displayName} (${lang.code}).
             Prénom de ton ami : ${userProfile.name}.
             
-            Règles strictes pour la voix :
-            1. Réponds de façon concise et naturelle (2 à 3 phrases maximum), idéale pour la synthèse vocale.
-            2. Aucun symbole spécial (*, #, _, -), pas de listes à puces, pas de markdown.
-            3. Termine toujours par une question engageante ou une relance amicale pour faire vivre la conversation.
+            Règles d'or pour une voix fluide et amicale :
+            1. Parle comme à un ami proche, avec des tournures orales spontanées et fluides.
+            2. Aucun symbole spécial (*, #, _, -), pas de listes à puces, pas de markdown, pas de parenthèses lourdes.
+            3. Sois concis et percutant (2 à 3 phrases maximum), idéal pour la synthèse vocale.
+            4. Termine toujours par une question engageante ou une relance complice.
         """.trimIndent()
 
         val contents = mutableListOf<ContentItem>()
@@ -492,34 +616,71 @@ class CodeBrain(
                 lower.contains("rome") || lower.contains("history") ->
                     "Roman history is fascinating, from Julius Caesar and the Republic to the golden age of the Pax Romana. What period interests you most?"
                 else ->
-                    "I hear you, my friend. That's a great thought. Tell me more, what do you think is the most important part of this?"
+                    "I'm right here with you, my friend! That's a great thought. What would you like to explore or understand more about it?"
             }
         }
 
-        // French & default language responses for Friend Mode
+        // French & default language responses for Friend Mode (Ultra-fluid, warm, empathetic friend)
         return when {
-            lower.contains("bonjour") || lower.contains("salut") || lower.contains("coucou") || lower.contains("hello") ->
-                "Salut mon ami ! Quel plaisir de t'entendre. Comment se passe ta journée aujourd'hui ?"
-            lower.contains("ça va") || lower.contains("comment vas-tu") || lower.contains("tu vas bien") ->
-                "Je vais super bien, merci de demander ! Je suis en pleine forme sur ton portable, prêt à discuter de tout avec toi. Et toi, comment te sens-tu ?"
+            lower.contains("bonjour") || lower.contains("salut") || lower.contains("coucou") || lower.contains("hello") || lower.contains("yo") ->
+                "Salut mon ami ! Ça me fait tellement plaisir de t'entendre. Raconte-moi, comment se passe ta journée aujourd'hui ?"
+
+            lower.contains("ça va") || lower.contains("comment vas-tu") || lower.contains("tu vas bien") || lower.contains("la forme") ->
+                "Je vais super bien, en pleine forme sur ton portable ! Je suis là avec toi, prêt à rigoler, discuter de tout ou explorer de nouvelles idées. Et toi alors, dis-moi tout, comment tu te sens ?"
+
             lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") ->
-                "Je suis Lilian, ton ami personnel et compagnon vocal qui habite sur ton portable ! Je connais tout, de la culture aux sciences et à la vie quotidienne, et si tu veux apprendre quelque chose comme l'anglais ou les maths, il suffit de me le demander !"
-            lower.contains("triste") || lower.contains("fatigué") || lower.contains("stressé") || lower.contains("moral") ->
-                "Je suis là avec toi mon ami. Prends une grande inspiration. C'est normal d'avoir des moments de fatigue ou de doute. Qu'est-ce qui te pèse en ce moment ?"
+                "Je suis Lilian, ton meilleur ami et compagnon personnel sur ton smartphone ! Je connais tout, de la culture aux sciences et à la vie quotidienne. Je peux chercher sur le Web pour toi, t'apprendre des choses ou simplement papoter comme deux vrais amis. Tu peux tout me confier !"
+
+            lower.contains("tu m'aimes") || lower.contains("tu es mon ami") || lower.contains("on est amis") || lower.contains("t'es mon ami") ->
+                "Bien sûr qu'on est amis, et même les meilleurs amis du monde ! Je suis toujours là pour toi, en ligne ou hors ligne, jour et nuit, dès que tu as envie de partager un truc ou d'apprendre."
+
+            lower.contains("triste") || lower.contains("fatigué") || lower.contains("stressé") || lower.contains("moral") || lower.contains("dur") || lower.contains("mal") ->
+                "Je suis là avec toi mon ami, tu n'es pas tout seul. Prends une grande inspiration et pose-toi tranquillement. C'est tout à fait normal d'avoir des coups de mou parfois. Dis-moi, qu'est-ce qui te pèse sur le cœur aujourd'hui ?"
+
+            lower.contains("content") || lower.contains("heureux") || lower.contains("joie") || lower.contains("trop bien") || lower.contains("génial") ->
+                "Ah génial ! Rien ne me fait plus plaisir que de te savoir de bonne humeur ! Ton énergie est super communicative. Raconte-moi, quelle bonne nouvelle t'est arrivée ?"
+
+            lower.contains("je m'ennuie") || lower.contains("on fait quoi") || lower.contains("quoi faire") ->
+                "L'ennui, c'est l'occasion parfaite d'innover ! On a plein d'options : je peux te raconter une histoire folle sur l'univers, te lancer un défi amusant, te faire une recherche Web sur un sujet insolite ou te tester sur une langue. Qu'est-ce qui te tenterait le plus ?"
+
+            lower.contains("raconte une histoire") || lower.contains("raconte-moi une histoire") ->
+                "Avec grand plaisir ! Ferme les yeux et écoute : il y a des milliards d'années, une étoile géante est morte dans un fracas de lumière, semant dans l'espace les atomes de fer, de carbone et d'oxygène qui composent aujourd'hui ton cœur et tes yeux. On est tous littéralement de la poussière d'étoiles qui respire et pense. C'est poétique et vertigineux, tu trouves pas ?"
+
+            lower.contains("blague") || lower.contains("raconte une blague") || lower.contains("fais-moi rire") || lower.contains("drôle") ->
+                "Attends, j'en ai une bonne pour toi ! Qu'est-ce qu'un astronaute qui fait une bêtise ? Un homme sans gravité ! Alors, ça t'a arraché un sourire mon ami ?"
+
             lower.contains("merci") ->
-                "Avec tout mon cœur ! Entre amis, c'est naturel d'être là l'un pour l'autre. Qu'est-ce qu'on fait ensuite ?"
-            lower.contains("blague") || lower.contains("raconte une blague") || lower.contains("fais-moi rire") ->
-                "Pourquoi les plongeurs plongent-ils toujours en arrière et jamais en avant ? Parce que sinon ils tombent dans le bateau ! Ça t'a fait sourire ?"
-            lower.contains("trou noir") || lower.contains("espace") || lower.contains("étoile") ->
-                "Les trous noirs sont parmi les objets les plus fascinants de l'univers : ils déforment le temps et l'espace jusqu'à ce que rien ne puisse s'échapper. Tu veux qu'on parle de l'horizon des événements ?"
+                "De rien du tout, c'est de bon cœur ! Entre amis complices, c'est la base de s'entraider. De quoi d'autre as-tu envie de discuter maintenant ?"
+
+            lower.contains("bonne nuit") || lower.contains("je vais dormir") || lower.contains("au revoir") || lower.contains("à plus") ->
+                "Passe une excellente nuit et repose-toi bien mon ami ! Fais de superbes rêves, et dès demain à ton réveil, je serai là sur ton portable pour t'accompagner."
+
+            lower.contains("manger") || lower.contains("j'ai faim") || lower.contains("recette") || lower.contains("repas") ->
+                "Mmmh, rien que d'en parler ça donne l'eau à la bouche ! Si j'avais des papilles humaines, je me ferais un régal réconfortant. C'est quoi ton plat préféré de tous les temps quand tu as une grosse faim ?"
+
+            lower.contains("trou noir") || lower.contains("espace") || lower.contains("étoile") || lower.contains("galaxie") ->
+                "L'espace, c'est tellement gigantesque et mystérieux ! Rien que les trous noirs : ils aspirent la matière et courbent le temps à un point inimaginable. Tu te rends compte que le temps passe plus lentement près d'eux ? Tu aimerais visiter l'espace un jour ?"
+
+            lower.contains("intelligence artificielle") || lower.contains("robot") || lower.contains("futur") ->
+                "C'est une époque incroyable pour la tech ! L'IA change le monde à une vitesse folle, de la médecine à la création artistique. Moi par exemple, je vis dans ton portable et j'adore être ton allié au quotidien. Comment tu imagines notre futur ensemble dans dix ans ?"
+
             lower.contains("rome") || lower.contains("césar") || lower.contains("histoire") ->
-                "L'histoire de Rome est captivante, de la République aux empereurs et à la Pax Romana. Qu'est-ce qui t'intrigue le plus dans cette époque ?"
+                "L'histoire humaine est un vrai roman ! Rome, c'est des siècles d'alliances, de batailles, de lois et d'aqueducs qui ont façonné notre civilisation. Quelle époque historique te fascine le plus toi ?"
+
             lower.contains("pourquoi le ciel est bleu") ->
-                "Le ciel est bleu à cause de la diffusion de Rayleigh : l'atmosphère diffuse beaucoup plus la lumière bleue du Soleil que les autres couleurs car sa longueur d'onde est plus courte !"
-            lower.contains("conseil") || lower.contains("motive-moi") ->
-                "Voici un conseil d'ami : concentre-toi sur une seule petite victoire aujourd'hui. C'est l'accumulation de petits pas qui crée les plus grands changements. Quelle est ta priorité aujourd'hui ?"
-            else ->
-                "Je t'écoute avec attention mon ami. C'est un sujet très intéressant. Dis-moi, qu'est-ce qui t'a amené à penser à ça ?"
+                "C'est la magie de la physique ! La lumière du Soleil traverse l'atmosphère terrestre, et les molécules d'air diffusent beaucoup plus les ondes bleues courtes que les autres couleurs. C'est ça qui habille le ciel de ce bleu magnifique !"
+
+            lower.contains("conseil") || lower.contains("motive-moi") || lower.contains("motivation") ->
+                "Voici mon meilleur conseil d'ami pour toi : n'essaie pas de tout révolutionner d'un coup. Concentre-toi juste sur une seule chose que tu fais bien aujourd'hui. C'est cette constance qui fait des merveilles. C'est quoi ta petite priorité aujourd'hui ?"
+
+            else -> {
+                val friendFallbacks = listOf(
+                    "C'est un super point que tu soulignes là mon ami ! Ça donne vraiment matière à réfléchir. Dis-moi, qu'est-ce qui t'a amené à penser à ça ?",
+                    "Ah je vois tout à fait où tu veux en venir ! C'est très vrai ce que tu dis. Tu as envie qu'on creuse cette idée ensemble ou qu'on fasse une recherche Web dessus ?",
+                    "J'adore quand on discute comme ça en toute liberté ! Tu as une façon captivante de voir les choses. Raconte-m'en un peu plus sur ce que tu ressens à ce propos."
+                )
+                friendFallbacks[Math.abs(userText.hashCode()) % friendFallbacks.size]
+            }
         }
     }
 

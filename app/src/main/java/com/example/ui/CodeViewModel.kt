@@ -60,6 +60,12 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedMode = MutableStateFlow(TutorMode.FRIEND)
     val selectedMode: StateFlow<TutorMode> = _selectedMode.asStateFlow()
 
+    private val _isWebSearching = MutableStateFlow(false)
+    val isWebSearching: StateFlow<Boolean> = _isWebSearching.asStateFlow()
+
+    private val _webSearchDialogVisible = MutableStateFlow(false)
+    val webSearchDialogVisible: StateFlow<Boolean> = _webSearchDialogVisible.asStateFlow()
+
     private val _isLanguageDialogVisible = MutableStateFlow(false)
     val isLanguageDialogVisible: StateFlow<Boolean> = _isLanguageDialogVisible.asStateFlow()
 
@@ -274,6 +280,22 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun showWebSearchDialog() {
+        _webSearchDialogVisible.value = true
+    }
+
+    fun hideWebSearchDialog() {
+        _webSearchDialogVisible.value = false
+    }
+
+    fun triggerWebSearch(query: String) {
+        _webSearchDialogVisible.value = false
+        val clean = query.trim()
+        if (clean.isNotBlank()) {
+            processInput("Fais des recherches sur internet à propos de $clean")
+        }
+    }
+
     fun startListening() {
         if (_isSpeaking.value) {
             stopSpeaking()
@@ -323,12 +345,20 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             // Update UI
             _liveUserTranscript.value = text
             _orbState.value = OrbState.THINKING
-            _statusText.value = "Je réfléchis…"
+
+            val isSearchIntent = com.example.data.remote.WebSearchService.extractSearchQuery(text) != null
+            if (isSearchIntent) {
+                _isWebSearching.value = true
+                _statusText.value = "🌐 Recherche sur Internet…"
+            } else {
+                _statusText.value = "Je réfléchis…"
+            }
 
             // Check if user requested a structured lesson prep flow
             val lower = text.lowercase()
             if (lower.contains("apprends-moi") || lower.contains("fais-moi une leçon") || lower.contains("nouvelle leçon")) {
                 handleLessonPrepFlow()
+                _isWebSearching.value = false
                 return@launch
             }
 
@@ -340,19 +370,28 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 recentMessages = allMessages.value
             )
 
+            _isWebSearching.value = false
+
             // Check if mode switch was requested by speech
             if (response.newMode != null) {
                 _selectedMode.value = response.newMode
             }
 
-            // Save Code reply to DB
+            // Save reply to DB with web search details
             val codeMsg = ConversationMessage(
                 role = "code",
                 text = response.replyText,
                 correctionNote = response.correctionNote,
-                mode = _selectedMode.value.name
+                mode = _selectedMode.value.name,
+                isWebSearch = response.isWebSearch,
+                webSearchTopic = response.webSearchTopic,
+                webSourceUrl = response.webSourceUrl
             )
             database.conversationDao().insertMessage(codeMsg)
+
+            if (response.isWebSearch && !response.webSearchTopic.isNullOrBlank()) {
+                _infoBannerMessage.value = "🌐 Recherche Web effectuée sur « ${response.webSearchTopic} »"
+            }
 
             // Update state
             _liveCodeReply.value = response.replyText

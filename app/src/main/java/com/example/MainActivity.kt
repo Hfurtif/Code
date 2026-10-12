@@ -74,6 +74,7 @@ import com.example.ui.screens.LevelTestDialog
 import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.StorageScreen
+import com.example.ui.screens.WebSearchDialog
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.MyApplicationTheme
@@ -120,6 +121,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val infoBanner by viewModel.infoBannerMessage.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val isLanguageDialogVisible by viewModel.isLanguageDialogVisible.collectAsState()
+    val isWebSearchDialogVisible by viewModel.webSearchDialogVisible.collectAsState()
     val showInitialLanguageDialog = !userProfile.hasSelectedInitialLanguage
 
     // Runtime Permission for Microphone
@@ -275,6 +277,16 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                         viewModel.hideLanguageDialog()
                     },
                     isFirstLaunch = showInitialLanguageDialog
+                )
+            }
+
+            // Autonomous Web Search Modal Dialog
+            if (isWebSearchDialogVisible) {
+                WebSearchDialog(
+                    onDismiss = { viewModel.hideWebSearchDialog() },
+                    onSearch = { query ->
+                        viewModel.triggerWebSearch(query)
+                    }
                 )
             }
         }

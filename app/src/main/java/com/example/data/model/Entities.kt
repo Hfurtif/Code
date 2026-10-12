@@ -36,7 +36,10 @@ data class ConversationMessage(
     val text: String,
     val correctionNote: String? = null,
     val timestamp: Long = System.currentTimeMillis(),
-    val mode: String = "ENGLISH"
+    val mode: String = "ENGLISH",
+    val isWebSearch: Boolean = false,
+    val webSearchTopic: String? = null,
+    val webSourceUrl: String? = null
 )
 
 @Entity(tableName = "lessons")

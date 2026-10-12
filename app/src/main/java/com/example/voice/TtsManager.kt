@@ -89,22 +89,29 @@ class TtsManager(
         try {
             val result = tts?.setLanguage(targetLocale)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) {
-                // Try language only without country
-                tts?.setLanguage(Locale(targetLocale.language))
+                // Fallback to language code
+                tts?.setLanguage(Locale.forLanguageTag(targetLocale.language))
             }
 
-            // Pick matching voice if available
+            // Pick the highest quality, most natural voice for this locale
             val voices = tts?.voices ?: emptySet()
-            val matchingVoice = voices.firstOrNull {
-                it.locale.language.equals(targetLocale.language, ignoreCase = true) &&
-                        !it.isNetworkConnectionRequired
-            } ?: voices.firstOrNull {
+            val langVoices = voices.filter {
                 it.locale.language.equals(targetLocale.language, ignoreCase = true)
             }
 
-            if (matchingVoice != null) {
-                tts?.voice = matchingVoice
-                currentVoiceName = matchingVoice.name
+            // Priority: High quality (neural/wavenet/very-high), without network latency requirement
+            val bestVoice = langVoices.sortedWith(
+                compareByDescending<Voice> { it.quality }
+                    .thenByDescending { !it.isNetworkConnectionRequired }
+                    .thenByDescending {
+                        val name = it.name.lowercase()
+                        name.contains("fr-fr-x") || name.contains("wavenet") || name.contains("neural") || name.contains("female")
+                    }
+            ).firstOrNull()
+
+            if (bestVoice != null) {
+                tts?.voice = bestVoice
+                currentVoiceName = bestVoice.name
             }
         } catch (e: Exception) {
             Log.e("TtsManager", "Error setting language on TTS", e)
@@ -153,14 +160,17 @@ class TtsManager(
         val targetLocale = AppLanguage.findByCode(accentCode).locale
         val voices = tts?.voices?.filter { it.locale.language == targetLocale.language } ?: emptyList()
         val isTargetFemale = gender.equals("female", ignoreCase = true)
-        val selected = voices.firstOrNull { voice ->
-            val nameLower = voice.name.lowercase()
-            if (isTargetFemale) {
-                nameLower.contains("female") || nameLower.contains("fem") || nameLower.contains("f")
-            } else {
-                nameLower.contains("male") || nameLower.contains("man") || nameLower.contains("m")
-            }
-        } ?: voices.firstOrNull()
+        val selected = voices.sortedWith(
+            compareByDescending<Voice> { it.quality }
+                .thenByDescending {
+                    val nameLower = it.name.lowercase()
+                    if (isTargetFemale) {
+                        nameLower.contains("female") || nameLower.contains("fem") || nameLower.contains("f")
+                    } else {
+                        nameLower.contains("male") || nameLower.contains("man") || nameLower.contains("m")
+                    }
+                }
+        ).firstOrNull() ?: voices.firstOrNull()
 
         if (selected != null) {
             tts?.voice = selected
@@ -170,23 +180,59 @@ class TtsManager(
         }
     }
 
-    fun speak(text: String) {
-        val cleanOralText = text
+    /**
+     * Cleans text and adds natural oral punctuation and micro-pauses
+     * to make synthesized speech sound like a warm, fluid friend chatting.
+     */
+    fun cleanOralText(text: String): String {
+        var clean = text
+            // Strip markdown, asterisks, hashtags, bullets
             .replace(Regex("[*#_`~]"), "")
             .replace(Regex("\\[.*?\\]"), "")
             .replace(Regex("(?m)^[-*•]\\s+"), "")
+            // Strip technical URL protocols
+            .replace(Regex("https?://\\S+"), "sur le web")
+            // Strip academic parentheticals like (né en 1920) or (/pɑ.ʁi/)
+            .replace(Regex("\\s*\\([^)]*?\\)"), "")
+            // Expand common abbreviations for fluid French pronunciation
+            .replace(Regex("(?i)\\bkm/h\\b"), "kilomètres par heure")
+            .replace(Regex("(?i)\\bkm²\\b"), "kilomètres carrés")
+            .replace(Regex("(?i)\\bkm\\b"), "kilomètres")
+            .replace(Regex("(?i)\\bkg\\b"), "kilos")
+            .replace(Regex("(?i)\\bc.-à-d.\\b"), "c'est-à-dire")
+            .replace(Regex("(?i)\\bex.\\b"), "par exemple")
+            .replace(Regex("(?i)\\bapprox.\\b"), "environ")
+            .replace(Regex("(?i)\\b1er\\b"), "premier")
+            .replace(Regex("(?i)\\b1ère\\b"), "première")
+            .replace(Regex("(?i)\\b2e\\b"), "deuxième")
+            .replace(Regex("(?i)\\b3e\\b"), "troisième")
+            .replace(Regex("(?i)\\bav. j.-c.\\b"), "avant Jésus-Christ")
+            .replace(Regex("(?i)\\bap. j.-c.\\b"), "après Jésus-Christ")
+            .replace(Regex("(?i)\\bIA\\b"), "I A")
+            .replace("%", " pour cent")
+            .replace("°C", " degrés Celsius")
+            // Natural pauses: replace multiple exclamation or question marks
+            .replace(Regex("!+"), "!")
+            .replace(Regex("\\?+"), "?")
+            .replace("...", ", ")
+            .replace(Regex("\\s+"), " ")
             .trim()
 
-        if (cleanOralText.isBlank()) return
+        return clean
+    }
+
+    fun speak(text: String) {
+        val oralText = cleanOralText(text)
+        if (oralText.isBlank()) return
 
         if (!isInitialized) {
-            pendingSpeechText = cleanOralText
+            pendingSpeechText = oralText
             return
         }
 
         stop()
         val utteranceId = "lilian_utterance_${System.currentTimeMillis()}"
-        val res = tts?.speak(cleanOralText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+        val res = tts?.speak(oralText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (res == TextToSpeech.SUCCESS) {
             onSpeakingStateChanged(true)
         } else {

@@ -11,7 +11,19 @@ class ExampleUnitTest {
     @Test
     fun testTutorModesConfigured() {
         assertEquals(4, TutorMode.values().size)
-        assertEquals("Professeur d'anglais", TutorMode.ENGLISH.title)
+        assertEquals("Professeur d'anglais", TutorMode.ENGLISH_TEACHER.title)
+    }
+
+    @Test
+    fun testWebSearchIntentExtraction() {
+        val q1 = com.example.data.remote.WebSearchService.extractSearchQuery("Fais des recherches sur les trous noirs")
+        assertEquals("les trous noirs", q1)
+
+        val q2 = com.example.data.remote.WebSearchService.extractSearchQuery("Recherche sur internet l'intelligence artificielle")
+        assertEquals("l'intelligence artificielle", q2)
+
+        val q3 = com.example.data.remote.WebSearchService.extractSearchQuery("C'est quoi un trou noir ?")
+        assertEquals("un trou noir", q3)
     }
 
     @Test
