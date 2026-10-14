@@ -188,7 +188,7 @@ object WebSearchService {
 
             val searchReq = Request.Builder()
                 .url(searchUrl)
-                .header("User-Agent", "LilianCompanionAndroid/1.0 (Mobile Assistant)")
+                .header("User-Agent", "CodeCompanionAndroid/1.0 (Mobile Assistant)")
                 .build()
 
             val searchResp = httpClient.newCall(searchReq).execute()
@@ -208,7 +208,7 @@ object WebSearchService {
             val summaryUrl = "https://$lang.wikipedia.org/api/rest_v1/page/summary/$encodedTitle"
             val summaryReq = Request.Builder()
                 .url(summaryUrl)
-                .header("User-Agent", "LilianCompanionAndroid/1.0 (Mobile Assistant)")
+                .header("User-Agent", "CodeCompanionAndroid/1.0 (Mobile Assistant)")
                 .build()
 
             val summaryResp = httpClient.newCall(summaryReq).execute()
@@ -250,7 +250,7 @@ object WebSearchService {
 
             val req = Request.Builder()
                 .url(url)
-                .header("User-Agent", "LilianCompanionAndroid/1.0")
+                .header("User-Agent", "CodeCompanionAndroid/1.0 (Mobile Assistant)")
                 .build()
 
             val resp = httpClient.newCall(req).execute()

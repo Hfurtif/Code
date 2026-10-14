@@ -26,7 +26,10 @@ data class UserProfile(
     val preferredLanguageName: String = "Français",
     val activeRole: String = "friend", // "friend", "english_teacher", "math_teacher", "custom_learner"
     val hasSelectedInitialLanguage: Boolean = false,
-    val maxStorageLimitGb: Double = 20.0
+    val maxStorageLimitGb: Double = 20.0,
+    val companionName: String = "Code",
+    val companionGender: String = "neutral", // "boy", "girl", "neutral"
+    val hasNamedCompanion: Boolean = false
 )
 
 @Entity(tableName = "conversations")

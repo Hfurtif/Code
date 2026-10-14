@@ -30,7 +30,7 @@ class SpeechManager(
     fun startListening(languageCode: String = "fr-FR") {
         mainHandler.post {
             if (!isAvailable()) {
-                onErrorOccurred("Reconnaissance vocale non disponible sur cet appareil. Tu peux utiliser la zone de texte pour discuter avec Lilian !")
+                onErrorOccurred("Reconnaissance vocale non disponible sur cet appareil. Tu peux utiliser la zone de texte pour discuter avec ton compagnon dans Code !")
                 return@post
             }
 
@@ -77,7 +77,7 @@ class SpeechManager(
                             val errorMsg = when (error) {
                                 SpeechRecognizer.ERROR_NO_MATCH -> "Je n'ai pas bien entendu ce que tu as dit. Peux-tu répéter ?"
                                 SpeechRecognizer.ERROR_SPEECH_TIMEOUT -> "Je ne t'entends plus mon ami. Appuie sur le micro quand tu veux parler !"
-                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission micro requise pour parler avec Lilian."
+                                SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> "Permission micro requise pour parler avec ton compagnon."
                                 SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> "Micro hors ligne activé."
                                 else -> "Micro en pause. Tu peux réappuyer pour parler."
                             }

@@ -112,6 +112,8 @@ fun ConversationScreen(
     val allMessages by viewModel.allMessages.collectAsState()
     val pendingTasks by viewModel.pendingTasks.collectAsState()
     val isWebSearching by viewModel.isWebSearching.collectAsState()
+    val userProfile by viewModel.userProfile.collectAsState()
+    val companionDisplayName = userProfile.companionName.ifBlank { "Code" }
 
     var textInput by remember { mutableStateOf("") }
     val historyListState = rememberLazyListState()
@@ -417,7 +419,7 @@ fun ConversationScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = if (isUser) "Toi" else "Lilian",
+                                                    text = if (isUser) "Toi" else companionDisplayName,
                                                     color = if (isUser) NeonCyan else NeonViolet,
                                                     fontSize = 10.sp,
                                                     fontWeight = FontWeight.Bold
@@ -570,7 +572,7 @@ fun ConversationScreen(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "Lilian explore les sources du Web pour t'informer et mémoriser le sujet.",
+                                    text = "$companionDisplayName explore les sources du Web pour t'informer et mémoriser le sujet.",
                                     color = TextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -645,7 +647,7 @@ fun ConversationScreen(
                                 }
                             } else if (liveTranscript.isBlank()) {
                                 Text(
-                                    text = "« Parle librement à Lilian ou demande-lui d'apprendre ce que tu veux… »",
+                                    text = "« Parle librement à $companionDisplayName ou demande-lui d'apprendre ce que tu veux… »",
                                     color = TextMuted,
                                     fontSize = 13.sp,
                                     textAlign = TextAlign.Center,
@@ -770,7 +772,7 @@ fun ConversationScreen(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Stop,
-                            contentDescription = "Interrompre Lilian",
+                            contentDescription = "Interrompre $companionDisplayName",
                             tint = if (isSpeaking) AlertPink else TextMuted
                         )
                     }

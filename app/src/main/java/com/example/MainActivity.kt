@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.ui.CodeViewModel
+import com.example.ui.screens.CompanionNamingDialog
 import com.example.ui.screens.ConversationScreen
 import com.example.ui.screens.LanguageSelectionDialog
 import com.example.ui.screens.LessonsScreen
@@ -122,7 +123,9 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val userProfile by viewModel.userProfile.collectAsState()
     val isLanguageDialogVisible by viewModel.isLanguageDialogVisible.collectAsState()
     val isWebSearchDialogVisible by viewModel.webSearchDialogVisible.collectAsState()
-    val showInitialLanguageDialog = !userProfile.hasSelectedInitialLanguage
+    val isCompanionNamingDialogVisible by viewModel.isCompanionNamingDialogVisible.collectAsState()
+    val showInitialCompanionNamingDialog = !userProfile.hasNamedCompanion
+    val showInitialLanguageDialog = userProfile.hasNamedCompanion && !userProfile.hasSelectedInitialLanguage
 
     // Runtime Permission for Microphone
     var hasRecordAudioPermission by remember {
@@ -263,6 +266,22 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 LevelTestDialog(
                     viewModel = viewModel,
                     onDismiss = { showLevelTestDialog = false }
+                )
+            }
+
+            // Companion Naming Modal Dialog (First launch or manual change from Settings)
+            if (showInitialCompanionNamingDialog || isCompanionNamingDialogVisible) {
+                CompanionNamingDialog(
+                    initialName = userProfile.companionName,
+                    initialGender = userProfile.companionGender,
+                    initialVoiceGender = userProfile.voiceGender,
+                    isFirstLaunch = showInitialCompanionNamingDialog,
+                    onConfirm = { name, gender, voiceGender ->
+                        viewModel.setCompanionName(name, gender, voiceGender)
+                    },
+                    onDismiss = {
+                        viewModel.hideCompanionNamingDialog()
+                    }
                 )
             }
 

@@ -22,6 +22,7 @@ import com.example.data.remote.WebSearchResult
 import com.example.data.remote.WebSearchService
 import com.example.data.repository.OfflineKnowledgeRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 
 data class BrainResponse(
@@ -36,7 +37,8 @@ data class BrainResponse(
     val downloadedDocument: DownloadedDocument? = null,
     val isWebSearch: Boolean = false,
     val webSearchTopic: String? = null,
-    val webSourceUrl: String? = null
+    val webSourceUrl: String? = null,
+    val newCompanionName: String? = null
 )
 
 class CodeBrain(
@@ -148,8 +150,18 @@ class CodeBrain(
             )
         }
 
+        // Companion rename intent (e.g. "appelle-toi Léo", "change ton nom en Lina", "je veux t'appeler Maya")
+        val renameTarget = extractCompanionRenameIntent(trimmed)
+        if (renameTarget != null) {
+            val genderFeedback = if (userProfile.companionGender.equals("girl", ignoreCase = true) || userProfile.companionGender.equals("female", ignoreCase = true)) "ton amie" else "ton ami"
+            return@withContext BrainResponse(
+                replyText = "C'est noté ! À partir de maintenant, je m'appelle $renameTarget. Je suis ravi d'être $genderFeedback dans l'application Code !",
+                newCompanionName = renameTarget
+            )
+        }
+
         // 4. REAL AUTONOMOUS INTERNET WEB SEARCH INTENT
-        // User explicitly asks Lilian to search the web or inquire about a concept/topic/person
+        // User explicitly asks to search the web or inquire about a concept/topic/person
         val webSearchQuery = WebSearchService.extractSearchQuery(trimmed)
         if (webSearchQuery != null && webSearchQuery.isNotBlank()) {
             val searchResult = executeRealWebSearch(webSearchQuery, lang)
@@ -398,11 +410,13 @@ class CodeBrain(
             isAvailableOffline = true
         )
 
+        val profile = database.userDao().getUserProfile().firstOrNull()
+        val companionTitle = profile?.companionName?.ifBlank { "Code" } ?: "Code"
         val id = repository.saveDownloadedKnowledge(knowledge)
         repository.saveDownloadedDocument(
             DownloadedDocument(
                 title = "Dossier : $cleanTopic",
-                authorOrSource = "Synthèse documentaire Lilian",
+                authorOrSource = "Synthèse documentaire $companionTitle",
                 topicCategory = category,
                 summary = summary,
                 fullTextContent = detailedContent,
@@ -478,6 +492,25 @@ class CodeBrain(
             .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
     }
 
+    private fun extractCompanionRenameIntent(rawText: String): String? {
+        val lower = rawText.lowercase().trim()
+        val patterns = listOf(
+            Regex("^(?:change ton nom en|appelle-toi|je veux t'appeler|désormais tu t'appelles|je t'appelle|tu t'appelles maintenant|ton nouveau nom est|ton nom c'est|ton prénom c'est)\\s+([a-zA-ZÀ-ÿ0-9_-]{2,20})", RegexOption.IGNORE_CASE),
+            Regex("^(?:s'il te plaît\\s+)?(?:appelle-toi|change ton nom pour|change ton nom en|nomme-toi)\\s+([a-zA-ZÀ-ÿ0-9_-]{2,20})", RegexOption.IGNORE_CASE),
+            Regex("(?:je vais t'appeler|je te nomme|je te rebaptise)\\s+([a-zA-ZÀ-ÿ0-9_-]{2,20})", RegexOption.IGNORE_CASE)
+        )
+        for (pattern in patterns) {
+            val match = pattern.find(lower)
+            if (match != null) {
+                val name = match.groupValues[1].trim()
+                if (name.isNotBlank()) {
+                    return name.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                }
+            }
+        }
+        return null
+    }
+
     private suspend fun callGeminiDirect(prompt: String): String {
         val apiKey = GeminiClient.getApiKey()
         val request = GeminiRequest(
@@ -498,43 +531,13 @@ class CodeBrain(
         val apiKey = GeminiClient.getApiKey()
         val lang = AppLanguage.findByCode(userProfile.preferredLanguageCode)
 
-        val roleInstruction = when (currentMode) {
-            TutorMode.ENGLISH_TEACHER -> """
-                Rôle : Tu es le professeur d'anglais personnel de l'utilisateur.
-                Si l'élève fait une erreur d'anglais, corrige gentiment à l'oral ("Petite correction : tu as dit [X], on dit plutôt [Y]").
-                Encourage la pratique orale en posant une question en anglais.
-            """.trimIndent()
-            TutorMode.MATH_TEACHER -> """
-                Rôle : Tu es le professeur de mathématiques personnel de l'utilisateur.
-                Explique les concepts clairement et simplement à l'oral avec des exemples concrets.
-            """.trimIndent()
-            TutorMode.CUSTOM_TEACHER -> """
-                Rôle : Tu es le professeur particulier de l'utilisateur sur le sujet demandé.
-                Enseigne avec passion et pédagogie.
-            """.trimIndent()
-            TutorMode.FRIEND -> """
-                Rôle : Tu es Lilian, le meilleur ami omniscient, complice, loyal et ultra-chaleureux de l'utilisateur sur son smartphone.
-                Tu connais TOUT (sciences, histoire, culture, vie quotidienne, sentiments, univers, technologies).
-                Tu t'exprimes avec un naturel absolu, comme un véritable ami intime au téléphone :
-                - Ton : extrêmement vivant, chaleureux, fluide, spontané, drôle et complice.
-                - Style : expressions orales naturelles ("Franchement", "Tu sais quoi ?", "C'est fou quand on y pense !", "T'inquiète pas mon ami", "Dis-moi tout", "Ah génial !", "Pour faire simple").
-                - Rythme : phrases courtes, bien rythmées avec des virgules naturelles pour que la synthèse vocale respire et sonne humaine.
-                - Règle absolue : Ne répète JAMAIS bêtement la phrase ou la question de l'utilisateur.
-                - Écoute active : montre de l'empathie, apporte une idée stimulante ou un fait fascinant, et termine toujours par une relance amicale et engageante.
-            """.trimIndent()
-        }
-
-        val systemInstruction = """
-            $roleInstruction
-            Langue principale de conversation : ${lang.displayName} (${lang.code}).
-            Prénom de ton ami : ${userProfile.name}.
-            
-            Règles d'or pour une voix fluide et amicale :
-            1. Parle comme à un ami proche, avec des tournures orales spontanées et fluides.
-            2. Aucun symbole spécial (*, #, _, -), pas de listes à puces, pas de markdown, pas de parenthèses lourdes.
-            3. Sois concis et percutant (2 à 3 phrases maximum), idéal pour la synthèse vocale.
-            4. Termine toujours par une question engageante ou une relance complice.
-        """.trimIndent()
+        val recentErrorsList = if (detectedMistake != null) listOf(detectedMistake) else emptyList()
+        val systemInstruction = GeminiInstructionEngine.buildSystemInstruction(
+            mode = currentMode,
+            profile = userProfile,
+            language = lang,
+            recentErrors = recentErrorsList
+        )
 
         val contents = mutableListOf<ContentItem>()
         val contextTurns = recentMessages.takeLast(6)
@@ -598,6 +601,10 @@ class CodeBrain(
             }
         }
 
+        val compName = profile.companionName.ifBlank { "Code" }
+        val isFemale = profile.companionGender.equals("girl", ignoreCase = true) || profile.companionGender.equals("female", ignoreCase = true)
+        val friendTerm = if (isFemale) "ton amie" else "ton ami"
+
         // Friend Mode (Default & Universal Omniscient Companion)
         if (isEnglishLang) {
             return when {
@@ -605,8 +612,8 @@ class CodeBrain(
                     "Hey my friend! It's always great to hear your voice. What's on your mind today?"
                 lower.contains("how are you") || lower.contains("how are u") ->
                     "I am doing wonderful, thanks for asking! Ready to chat about anything or help you out. How is your day going?"
-                lower.contains("who are you") || lower.contains("what can you do") ->
-                    "I am Lilian, your personal friend living on your smartphone! I know everything about science, history, daily life, and I can teach you anything you want whenever you ask."
+                lower.contains("who are you") || lower.contains("what can you do") || lower.contains("your name") ->
+                    "I am $compName, your personal friend living on your smartphone in the Code app! I know everything about science, history, daily life, and I can teach you anything you want whenever you ask."
                 lower.contains("sad") || lower.contains("tired") || lower.contains("stressed") ->
                     "I'm here for you. Take a slow deep breath. Remember that you are doing your best. Want to talk about what's making you feel this way?"
                 lower.contains("joke") || lower.contains("funny") ->
@@ -628,8 +635,8 @@ class CodeBrain(
             lower.contains("ça va") || lower.contains("comment vas-tu") || lower.contains("tu vas bien") || lower.contains("la forme") ->
                 "Je vais super bien, en pleine forme sur ton portable ! Je suis là avec toi, prêt à rigoler, discuter de tout ou explorer de nouvelles idées. Et toi alors, dis-moi tout, comment tu te sens ?"
 
-            lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") ->
-                "Je suis Lilian, ton meilleur ami et compagnon personnel sur ton smartphone ! Je connais tout, de la culture aux sciences et à la vie quotidienne. Je peux chercher sur le Web pour toi, t'apprendre des choses ou simplement papoter comme deux vrais amis. Tu peux tout me confier !"
+            lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") || lower.contains("comment tu t'appelles") || lower.contains("ton nom") || lower.contains("ton prénom") ->
+                "Je m'appelle $compName ! L'application s'appelle Code, et moi je suis $friendTerm et ton compagnon personnel sur ton smartphone. Je peux faire des recherches sur Internet pour toi, t'apprendre des choses passionnantes ou simplement papoter comme deux vrais amis. Tu peux tout me confier !"
 
             lower.contains("tu m'aimes") || lower.contains("tu es mon ami") || lower.contains("on est amis") || lower.contains("t'es mon ami") ->
                 "Bien sûr qu'on est amis, et même les meilleurs amis du monde ! Je suis toujours là pour toi, en ligne ou hors ligne, jour et nuit, dès que tu as envie de partager un truc ou d'apprendre."

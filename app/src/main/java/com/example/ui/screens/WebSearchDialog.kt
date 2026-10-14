@@ -122,7 +122,7 @@ fun WebSearchDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Lilian explore Internet pour toi",
+                                text = "Recherche autonome sur le Web",
                                 color = NeonCyan,
                                 fontSize = 11.sp
                             )
@@ -144,7 +144,7 @@ fun WebSearchDialog(
                 Spacer(modifier = Modifier.height(14.dp))
 
                 Text(
-                    text = "Dis ou écris le sujet que tu veux explorer. Lilian consultera les sources du Web en direct (encyclopédies, sciences, histoire, technologies), t'expliquera tout de vive voix et enregistrera le dossier sur ton portable pour consultation hors ligne !",
+                    text = "Dis ou écris le sujet que tu veux explorer. Ton compagnon consultera les sources du Web en direct (encyclopédies, sciences, histoire, technologies), t'expliquera tout de vive voix et enregistrera le dossier sur ton portable pour consultation hors ligne !",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     lineHeight = 17.sp

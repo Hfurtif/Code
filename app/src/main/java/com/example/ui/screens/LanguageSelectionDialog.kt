@@ -71,9 +71,9 @@ fun LanguageSelectionDialog(
             Column {
                 Text(
                     text = if (isFirstLaunch) {
-                        "Choisis la langue dans laquelle tu souhaites parler et discuter avec ton ami personnel Lilian :"
+                        "Choisis la langue dans laquelle tu souhaites parler et discuter avec ton compagnon personnel dans l'application Code :"
                     } else {
-                        "Sélectionne la langue pour la reconnaissance vocale et la voix de Lilian :"
+                        "Sélectionne la langue pour la reconnaissance vocale et la synthèse vocale :"
                     },
                     color = TextSecondary,
                     fontSize = 12.sp,

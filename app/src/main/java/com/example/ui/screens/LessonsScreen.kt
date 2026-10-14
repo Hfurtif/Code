@@ -94,6 +94,8 @@ fun LessonsScreen(
 ) {
     val knowledgeList by viewModel.allKnowledge.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
+    val profile by viewModel.userProfile.collectAsState()
+    val companionName = profile.companionName.ifBlank { "Code" }
 
     var selectedTab by remember { mutableIntStateOf(0) } // 0: Choisir un sujet, 1: Cours en mémoire hors-ligne
     var customSubjectInput by remember { mutableStateOf("") }
@@ -103,7 +105,7 @@ fun LessonsScreen(
         LearningSubject(
             id = "english",
             title = "Pratiquer & Apprendre l'Anglais",
-            subtitle = "Lilian passe en professeur d'anglais : vocabulaire, écoute et corrections orales bienveillantes.",
+            subtitle = "$companionName passe en professeur d'anglais : vocabulaire, écoute et corrections orales bienveillantes.",
             icon = Icons.Default.Language,
             accentColor = ElectricBlue,
             promptToTrigger = "Apprends-moi l'anglais, s'il te plaît !",
@@ -112,7 +114,7 @@ fun LessonsScreen(
         LearningSubject(
             id = "math",
             title = "Mathématiques & Logique",
-            subtitle = "Lilian devient professeur de maths : calcul mental, algèbre, géométrie et théorèmes expliqués simplement.",
+            subtitle = "$companionName devient professeur de maths : calcul mental, algèbre, géométrie et théorèmes expliqués simplement.",
             icon = Icons.Default.Calculate,
             accentColor = NeonViolet,
             promptToTrigger = "Apprends-moi les maths et la logique !",
@@ -164,13 +166,13 @@ fun LessonsScreen(
     ) {
         // Header
         Text(
-            text = "Apprendre avec Lilian",
+            text = "Apprendre avec $companionName",
             fontSize = 24.sp,
             fontWeight = FontWeight.Bold,
             color = TextPrimary
         )
         Text(
-            text = "Lilian est ton ami qui sait tout. Dis-lui ce que tu souhaites apprendre, il se prépare et t'enseigne à l'oral !",
+            text = "$companionName est ton ami qui sait tout dans l'application Code. Dis-lui ce que tu souhaites apprendre, il se prépare et t'enseigne à l'oral !",
             fontSize = 12.sp,
             color = TextSecondary,
             lineHeight = 17.sp
@@ -238,7 +240,7 @@ fun LessonsScreen(
                                     )
                                 }
                                 Text(
-                                    text = "Tape n'importe quel sujet (ex: physique quantique, guitare, philosophie…). Lilian fera les recherches et téléchargera le cours sur ton portable !",
+                                    text = "Tape n'importe quel sujet (ex: physique quantique, guitare, philosophie…). $companionName fera les recherches et téléchargera le cours sur ton portable !",
                                     color = TextSecondary,
                                     fontSize = 11.sp,
                                     modifier = Modifier.padding(vertical = 4.dp)
@@ -391,7 +393,7 @@ fun LessonsScreen(
                                     )
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Discuter à l'oral avec Lilian",
+                                        text = "Discuter à l'oral avec $companionName",
                                         color = subject.accentColor,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 12.sp
@@ -428,7 +430,7 @@ fun LessonsScreen(
                             )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "Choisis un sujet dans le premier onglet ou dis à Lilian :\n« Télécharge un cours sur les trous noirs » !",
+                                text = "Choisis un sujet dans le premier onglet ou dis à $companionName :\n« Télécharge un cours sur les trous noirs » !",
                                 color = TextMuted,
                                 fontSize = 12.sp,
                                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -577,7 +579,7 @@ fun LessonsScreen(
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
                 ) {
-                    Text("Discuter avec Lilian", color = DarkBackground, fontWeight = FontWeight.Bold)
+                    Text("Discuter avec $companionName", color = DarkBackground, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {

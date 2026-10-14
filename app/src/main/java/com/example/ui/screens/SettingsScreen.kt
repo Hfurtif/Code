@@ -17,6 +17,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
@@ -90,7 +92,7 @@ fun SettingsScreen(
             color = TextPrimary
         )
         Text(
-            text = "Personnalise la voix, le rythme et la mémoire de Lilian",
+            text = "Personnalise le nom, la voix et la personnalité de ton compagnon",
             fontSize = 13.sp,
             color = TextSecondary
         )
@@ -101,6 +103,75 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            // Companion Profile & Name Customization Card
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = NeonViolet,
+                    backgroundColor = DarkSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Face, contentDescription = null, tint = NeonViolet)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Compagnon Personnel",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                color = NeonViolet.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = profile.companionName.ifBlank { "Code" },
+                                    color = NeonCyan,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        val genderLabel = when (profile.companionGender.lowercase()) {
+                            "boy", "male", "garçon" -> "Garçon 👦 (ami complice)"
+                            "girl", "female", "fille" -> "Fille 👧 (amie complice)"
+                            else -> "Neutre / Code 🤖"
+                        }
+
+                        Text(
+                            text = "L'application s'appelle Code. Tu as nommé ton compagnon « ${profile.companionName.ifBlank { "Code" }} » ($genderLabel).",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { viewModel.showCompanionNamingDialog() },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("change_companion_name_button")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Changer le prénom ou le genre", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+            }
+
             // Voice Customization Card (Gender, Accent, Pitch, Rate, Audio Preview)
             item {
                 GlassCard(
@@ -249,7 +320,7 @@ fun SettingsScreen(
                         // Sample Voice Audio Preview Button
                         Button(
                             onClick = {
-                                viewModel.speak("Bonjour ! Je suis Lilian, ton ami omniscient. Discutons de ce qui te passionne !")
+                                viewModel.speak("Bonjour ! Je m'appelle ${profile.companionName.ifBlank { "Code" }}, ton ami omniscient dans l'application Code. Discutons de ce qui te passionne !")
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(12.dp),
@@ -287,7 +358,7 @@ fun SettingsScreen(
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = "Le micro se réactive automatiquement après chaque réponse de Lilian, comme au téléphone.",
+                                text = "Le micro se réactive automatiquement après chaque réponse de ${profile.companionName.ifBlank { "Code" }}, comme au téléphone.",
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 lineHeight = 16.sp
@@ -416,7 +487,7 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(6.dp))
                         Text(
-                            text = "Lilian fonctionne directement sur ton téléphone. Tes conversations, tes connaissances et tes cours sont stockés exclusivement dans la mémoire locale de ton appareil. Aucun compte requis, aucune donnée personnelle collectée.",
+                            text = "L'application Code fonctionne directement sur ton téléphone. Tes conversations avec ${profile.companionName.ifBlank { "Code" }}, tes connaissances et tes cours sont stockés exclusivement dans la mémoire locale de ton appareil. Aucun compte requis, aucune donnée personnelle collectée.",
                             color = TextSecondary,
                             fontSize = 12.sp,
                             lineHeight = 17.sp

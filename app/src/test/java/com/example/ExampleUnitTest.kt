@@ -39,4 +39,33 @@ class ExampleUnitTest {
         assertNotNull(cafeScenario)
         assertEquals("Commander dans un café à Londres", cafeScenario?.title)
     }
+
+    @Test
+    fun testGeminiInstructionEngine() {
+        val profile = com.example.data.model.UserProfile(name = "Alex", level = "B2", companionName = "Léo", companionGender = "boy")
+        val lang = com.example.data.model.AppLanguage.findByCode("fr-FR")
+        val instruction = com.example.engine.GeminiInstructionEngine.buildSystemInstruction(
+            mode = com.example.data.model.TutorMode.ENGLISH_TEACHER,
+            profile = profile,
+            language = lang
+        )
+        assertTrue(instruction.contains("Alex"))
+        assertTrue(instruction.contains("Léo"))
+        assertTrue(instruction.contains("figure masculine"))
+        assertTrue(instruction.contains("Code"))
+        assertTrue(instruction.contains("Franchement"))
+    }
+
+    @Test
+    fun testCompanionGirlPersona() {
+        val profile = com.example.data.model.UserProfile(name = "Max", level = "B1", companionName = "Lina", companionGender = "girl")
+        val lang = com.example.data.model.AppLanguage.findByCode("fr-FR")
+        val instruction = com.example.engine.GeminiInstructionEngine.buildSystemInstruction(
+            mode = com.example.data.model.TutorMode.FRIEND,
+            profile = profile,
+            language = lang
+        )
+        assertTrue(instruction.contains("Lina"))
+        assertTrue(instruction.contains("figure féminine"))
+    }
 }

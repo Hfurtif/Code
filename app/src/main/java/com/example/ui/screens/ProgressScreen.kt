@@ -93,7 +93,7 @@ fun ProgressScreen(
             color = TextPrimary
         )
         Text(
-            text = "Lilian mémorise chaque apprentissage pour mesurer ton évolution",
+            text = "${profile.companionName.ifBlank { "Code" }} mémorise chaque apprentissage pour mesurer ton évolution",
             fontSize = 13.sp,
             color = TextSecondary
         )

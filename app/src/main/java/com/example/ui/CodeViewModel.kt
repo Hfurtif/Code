@@ -69,6 +69,9 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isLanguageDialogVisible = MutableStateFlow(false)
     val isLanguageDialogVisible: StateFlow<Boolean> = _isLanguageDialogVisible.asStateFlow()
 
+    private val _isCompanionNamingDialogVisible = MutableStateFlow(false)
+    val isCompanionNamingDialogVisible: StateFlow<Boolean> = _isCompanionNamingDialogVisible.asStateFlow()
+
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
@@ -246,6 +249,47 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         _isLanguageDialogVisible.value = false
     }
 
+    fun showCompanionNamingDialog() {
+        _isCompanionNamingDialogVisible.value = true
+    }
+
+    fun hideCompanionNamingDialog() {
+        _isCompanionNamingDialogVisible.value = false
+    }
+
+    fun setCompanionName(name: String, gender: String, voiceGender: String) {
+        viewModelScope.launch {
+            val cleanName = name.trim().ifBlank { "Code" }
+            val currentProfile = userProfile.value
+            val updated = currentProfile.copy(
+                companionName = cleanName,
+                companionGender = gender,
+                voiceGender = voiceGender,
+                hasNamedCompanion = true
+            )
+            database.userDao().insertOrUpdate(updated)
+            ttsManager?.setVoiceByGenderAndAccent(voiceGender, updated.preferredLanguageCode)
+            _isCompanionNamingDialogVisible.value = false
+
+            val welcomeMsg = when (gender.lowercase()) {
+                "boy", "male", "garçon" -> "Enchanté ! À partir de maintenant, je m'appelle $cleanName et je suis ton ami personnel sur ton smartphone dans l'application Code. De quoi aimerais-tu parler ?"
+                "girl", "female", "fille" -> "Enchantée ! À partir de maintenant, je m'appelle $cleanName et je suis ton amie personnelle sur ton smartphone dans l'application Code. De quoi as-tu envie de discuter aujourd'hui ?"
+                else -> "Ravi de faire ta connaissance ! Je m'appelle $cleanName et je suis ton compagnon personnel dans l'application Code. Que souhaites-tu explorer ou apprendre ?"
+            }
+
+            _liveCodeReply.value = welcomeMsg
+            _infoBannerMessage.value = "Ton compagnon s'appelle désormais « $cleanName »"
+            speak(welcomeMsg)
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = welcomeMsg,
+                    mode = _selectedMode.value.name
+                )
+            )
+        }
+    }
+
     fun selectLanguage(language: com.example.data.model.AppLanguage) {
         viewModelScope.launch {
             val updated = userProfile.value.copy(
@@ -257,13 +301,14 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             database.userDao().insertOrUpdate(updated)
             ttsManager?.setLanguage(language.code)
             _isLanguageDialogVisible.value = false
-            _liveCodeReply.value = language.defaultGreeting
+            val personalizedGreeting = language.formatGreeting(userProfile.value.companionName)
+            _liveCodeReply.value = personalizedGreeting
             _statusText.value = "Prêt (${language.displayName})"
-            speak(language.defaultGreeting)
+            speak(personalizedGreeting)
             database.conversationDao().insertMessage(
                 ConversationMessage(
                     role = "code",
-                    text = language.defaultGreeting,
+                    text = personalizedGreeting,
                     mode = _selectedMode.value.name
                 )
             )
@@ -375,6 +420,13 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             // Check if mode switch was requested by speech
             if (response.newMode != null) {
                 _selectedMode.value = response.newMode
+            }
+
+            // Check if companion was renamed by speech
+            if (response.newCompanionName != null) {
+                val clean = response.newCompanionName.trim()
+                database.userDao().insertOrUpdate(userProfile.value.copy(companionName = clean, hasNamedCompanion = true))
+                _infoBannerMessage.value = "Nom du compagnon mis à jour : « $clean »"
             }
 
             // Save reply to DB with web search details

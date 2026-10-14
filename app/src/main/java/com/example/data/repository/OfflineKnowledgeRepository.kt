@@ -133,7 +133,7 @@ class OfflineKnowledgeRepository(
     ): DownloadedDocument = withContext(Dispatchers.IO) {
         val doc = DownloadedDocument(
             title = query.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() },
-            authorOrSource = "Recherche Web Lilian",
+            authorOrSource = "Recherche Web Code",
             topicCategory = category,
             summary = summary,
             fullTextContent = fullContent,
@@ -159,7 +159,7 @@ class OfflineKnowledgeRepository(
     }
 
     /**
-     * Initializes initial boot pack if not yet installed, so Lilian works offline from day one.
+     * Initializes initial boot pack if not yet installed, so Code works offline from day one.
      */
     suspend fun initializeBootPackIfNeeded(
         onProgress: (Float, String) -> Unit
@@ -177,6 +177,6 @@ class OfflineKnowledgeRepository(
         delay(300)
 
         database.userDao().insertOrUpdate(profile.copy(hasDownloadedInitialPack = true))
-        onProgress(1.0f, "Pack hors-ligne installé avec succès ! Lilian est prêt à discuter.")
+        onProgress(1.0f, "Pack hors-ligne installé avec succès ! Ton compagnon est prêt à discuter.")
     }
 }

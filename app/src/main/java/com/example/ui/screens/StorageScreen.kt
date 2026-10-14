@@ -96,6 +96,7 @@ fun StorageScreen(
     val pendingTasks by viewModel.pendingTasks.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val companionName = userProfile.companionName.ifBlank { "Code" }
 
     var downloadTopicInput by remember { mutableStateOf("") }
     var searchQuery by remember { mutableStateOf("") }
@@ -176,7 +177,7 @@ fun StorageScreen(
                                 Icon(Icons.Default.Storage, contentDescription = null, tint = NeonCyan)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Espace occupé par Lilian",
+                                    text = "Espace occupé par $companionName",
                                     color = TextPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.Bold
@@ -276,7 +277,7 @@ fun StorageScreen(
                             )
                         }
                         Text(
-                            text = "Lilian fait les recherches, télécharge le cours et les documents pour discuter avec toi hors ligne.",
+                            text = "$companionName fait les recherches, télécharge le cours et les documents pour discuter avec toi hors ligne.",
                             color = TextSecondary,
                             fontSize = 11.sp,
                             modifier = Modifier.padding(vertical = 4.dp)
@@ -406,7 +407,7 @@ fun StorageScreen(
                             }
 
                             Text(
-                                text = "Questions ou cours demandés hors ligne. Lilian téléchargera tout dès que possible.",
+                                text = "Questions ou cours demandés hors ligne. $companionName téléchargera tout dès que possible.",
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
@@ -1218,7 +1219,7 @@ fun StorageScreen(
             },
             text = {
                 Text(
-                    text = "Lilian utilise actuellement un quota de ${maxLimitGb.toInt()} Go.\n\nAutorises-tu Lilian à étendre sa capacité de stockage de +20 Go (nouvelle limite : ${(maxLimitGb + 20).toInt()} Go) ?\n\nCet espace supplémentaire permettra de télécharger et conserver davantage de cours, dictionnaires et documents de recherche pour vos discussions vocales.",
+                    text = "$companionName utilise actuellement un quota de ${maxLimitGb.toInt()} Go.\n\nAutorises-tu $companionName à étendre sa capacité de stockage de +20 Go (nouvelle limite : ${(maxLimitGb + 20).toInt()} Go) ?\n\nCet espace supplémentaire permettra de télécharger et conserver davantage de cours, dictionnaires et documents de recherche pour vos discussions vocales.",
                     color = TextSecondary,
                     fontSize = 13.sp
                 )

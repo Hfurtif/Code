@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         DownloadedKnowledge::class,
         DownloadedDocument::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -92,7 +92,10 @@ abstract class AppDatabase : RoomDatabase() {
                     preferredLanguageName = "Français",
                     activeRole = "friend",
                     hasSelectedInitialLanguage = false,
-                    maxStorageLimitGb = 20.0
+                    maxStorageLimitGb = 20.0,
+                    companionName = "Code",
+                    companionGender = "neutral",
+                    hasNamedCompanion = false
                 )
             )
 
