@@ -117,40 +117,7 @@ class CodeBrain(
             )
         }
 
-        // 3. Learning On-Demand Mode Switches (English, Math, Custom Teacher vs Friend)
-        if (lower.contains("apprends-moi l'anglais") || lower.contains("je veux apprendre l'anglais") ||
-            lower.contains("teach me english") || lower.contains("mode prof d'anglais") || lower.contains("cours d'anglais")
-        ) {
-            val responseText = if (lang.code.startsWith("en")) {
-                "Awesome! I am now in English teacher mode. Let's practice together! Say something in English or tell me what you want to work on."
-            } else {
-                "Génial mon ami ! Je me mets maintenant en mode professeur d'anglais. Dis-moi ton objectif ou lance-toi simplement en anglais pour que je puisse t'écouter et t'aider !"
-            }
-            return@withContext BrainResponse(
-                replyText = responseText,
-                newMode = TutorMode.ENGLISH_TEACHER
-            )
-        }
-
-        if (lower.contains("apprends-moi les maths") || lower.contains("apprends-moi les mathématiques") ||
-            lower.contains("cours de maths") || lower.contains("teach me math")
-        ) {
-            return@withContext BrainResponse(
-                replyText = "Avec grand plaisir ! Je passe en mode professeur de mathématiques. Quel domaine veux-tu aborder : calcul mental, algèbre, géométrie ou logique ?",
-                newMode = TutorMode.MATH_TEACHER
-            )
-        }
-
-        if (lower.contains("reviens en mode ami") || lower.contains("sois mon ami") ||
-            lower.contains("discussion normale") || lower.contains("on arrête la leçon")
-        ) {
-            return@withContext BrainResponse(
-                replyText = "D'accord mon ami ! On revient à notre conversation libre et ouverte. De quoi d'autre as-tu envie de me parler ?",
-                newMode = TutorMode.FRIEND
-            )
-        }
-
-        // Companion rename intent (e.g. "appelle-toi Léo", "change ton nom en Lina", "je veux t'appeler Maya")
+        // 2b. Companion rename intent (e.g. "appelle-toi Léo", "change ton nom en Lina", "je veux t'appeler Maya")
         val renameTarget = extractCompanionRenameIntent(trimmed)
         if (renameTarget != null) {
             val genderFeedback = if (userProfile.companionGender.equals("girl", ignoreCase = true) || userProfile.companionGender.equals("female", ignoreCase = true)) "ton amie" else "ton ami"
@@ -160,50 +127,80 @@ class CodeBrain(
             )
         }
 
-        // 4. REAL AUTONOMOUS INTERNET WEB SEARCH INTENT
-        // User explicitly asks to search the web or inquire about a concept/topic/person
-        val webSearchQuery = WebSearchService.extractSearchQuery(trimmed)
-        if (webSearchQuery != null && webSearchQuery.isNotBlank()) {
-            val searchResult = executeRealWebSearch(webSearchQuery, lang)
-            if (searchResult != null) {
-                return@withContext searchResult
+        // 3. Level & Progression check (Directly answered in conversation without needing separate screens)
+        if (lower.contains("mon niveau") || lower.contains("ma progression") ||
+            lower.contains("quel niveau") || lower.contains("où j'en suis") ||
+            lower.contains("mes progrès") || lower.contains("évalue-moi") ||
+            lower.contains("fais le point") || lower.contains("my level") || lower.contains("my progress")
+        ) {
+            val userLevel = userProfile.level.ifBlank { "Intermédiaire B1" }
+            val docsCount = database.documentDao().getDocumentCount()
+            val errorsCount = database.learnedErrorDao().getAllErrorsSync().size
+            val reply = if (lang.code.startsWith("en")) {
+                "Here is your progress update, my friend! Your estimated level is $userLevel. You have $docsCount stored source(s) in your offline memory that we can discuss anytime. You have mastered $errorsCount key language points. Keep going! Would you like to practice or explore one of your sources?"
+            } else {
+                "Voici le point sur ta progression, mon ami ! Ton niveau actuel est estimé à : $userLevel. Tu as déjà $docsCount source(s) mémorisée(s) dans ma mémoire locale pour nos discussions hors ligne. Tu as également assimilé $errorsCount notions clés. Tu progresses très bien ! De quelle source ou sujet souhaites-tu qu'on discute ?"
+            }
+            return@withContext BrainResponse(replyText = reply)
+        }
+
+        // 4. Direct Link & Source ingestion (YouTube, TikTok, Web links) provided in conversation
+        val detectedUrl = com.example.data.remote.SourceIngestionService.extractUrl(trimmed)
+        if (detectedUrl != null) {
+            try {
+                val ingestedResult = com.example.data.remote.SourceIngestionService.ingestFromUrl(detectedUrl)
+                val docId = repository.saveIngestedSource(ingestedResult)
+                val reply = if (lang.code.startsWith("en")) {
+                    "I successfully downloaded and memorized your source: \"${ingestedResult.title}\" (${ingestedResult.author})! Key takeaway: ${ingestedResult.summary} It is now stored in your Sources and available offline. We can discuss it right now!"
+                } else {
+                    "J'ai bien téléchargé et mémorisé ta source : « ${ingestedResult.title} » (${ingestedResult.author}) ! Voici ce que j'en retiens : ${ingestedResult.summary} Elle est maintenant enregistrée dans tes Sources et consultable hors ligne. De quoi souhaites-tu qu'on discute à ce sujet ?"
+                }
+                return@withContext BrainResponse(
+                    replyText = reply,
+                    isWebSearch = false,
+                    webSearchTopic = ingestedResult.title,
+                    webSourceUrl = detectedUrl
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Error ingesting url in chat", e)
+                return@withContext BrainResponse(
+                    replyText = "J'ai bien détecté ton lien, mais je n'ai pas pu en extraire le contenu pour le moment. Vérifie ta connexion ou colle directement le texte dans l'onglet Sources !"
+                )
             }
         }
 
-        // 5. Download Course / Material Request Intent Detection
-        val downloadTopic = extractDownloadKnowledgeIntent(trimmed)
-        if (downloadTopic != null) {
-            if (isOnline()) {
-                val knowledge = downloadAndSaveKnowledge(downloadTopic, lang)
+        // 5. Direct Document ingestion from conversation (e.g. "Voici un document [titre]: [contenu]")
+        if (lower.startsWith("voici un document") || lower.startsWith("document :") || lower.startsWith("apprends ce document")) {
+            val raw = trimmed.substringAfter(":").trim()
+            val docTitle = if (raw.contains("\n")) raw.substringBefore("\n").take(40) else "Document utilisateur"
+            val docContent = if (raw.contains("\n")) raw.substringAfter("\n").trim() else raw
+            if (docContent.isNotBlank()) {
+                val ingestedResult = com.example.data.remote.SourceIngestionService.ingestFromDocumentText(docTitle, docContent)
+                repository.saveIngestedSource(ingestedResult)
                 return@withContext BrainResponse(
-                    replyText = if (lang.code.startsWith("en")) {
-                        "All set! I searched online, downloaded and saved the complete material on ${knowledge.topic} to your phone. Here is what I learned: ${knowledge.summary} Even offline, we can discuss it anytime!"
-                    } else {
-                        "C'est fait mon ami ! J'ai cherché sur Internet, téléchargé et enregistré le dossier complet sur ${knowledge.topic} dans la mémoire de ton portable. Voici les faits essentiels : ${knowledge.summary} Même hors ligne et sans Internet, nous pourrons en discuter librement à l'oral !"
-                    },
-                    triggeredCommand = "knowledge_downloaded",
-                    downloadedKnowledge = knowledge,
-                    isWebSearch = true,
-                    webSearchTopic = knowledge.topic
+                    replyText = "C'est enregistré ! J'ai lu, analysé et mémorisé ton document « ${ingestedResult.title} » dans mes Sources. Nous pouvons désormais en discuter hors ligne à tout moment !"
+                )
+            }
+        }
+
+        // 6. Query all Sources / What do you know about my sources
+        if (lower.contains("mes sources") || lower.contains("mes documents") || lower.contains("que sais-tu de mes sources") ||
+            lower.contains("qu'as-tu appris") || lower.contains("résume mes sources")
+        ) {
+            val docs = database.documentDao().getAllDocumentsSync()
+            if (docs.isEmpty()) {
+                return@withContext BrainResponse(
+                    replyText = "Tu n'as pas encore ajouté de source dans ma mémoire. Ajoute un lien (YouTube, TikTok, article web) ou un document dans l'onglet Sources (ou donne-moi un lien directement ici) pour que je le télécharge et l'apprenne !"
                 )
             } else {
-                database.pendingTaskDao().insertTask(
-                    PendingTask(query = "Télécharger : $downloadTopic")
-                )
-                return@withContext BrainResponse(
-                    replyText = if (lang.code.startsWith("en")) {
-                        "I don't have internet access right now to download $downloadTopic. I've queued it up in my tasks, and I will download it as soon as you connect!"
-                    } else {
-                        "Je n'ai pas de connexion Internet en ce moment pour télécharger des informations sur $downloadTopic. Je l'ai enregistré dans mes tâches. Dès que ton portable sera connecté, je ferai les recherches et je téléchargerai tout pour toi !"
-                    },
-                    isOfflineMode = true,
-                    pendingTaskLogged = true
-                )
+                val titlesList = docs.take(5).joinToString(", ") { "« ${it.title} »" }
+                val reply = "Voici les sources que j'ai mémorisées sur ton portable : $titlesList${if (docs.size > 5) " et ${docs.size - 5} autre(s)" else ""}. Elles sont toutes disponibles pour nos échanges hors ligne. De laquelle souhaites-tu qu'on parle ?"
+                return@withContext BrainResponse(replyText = reply)
             }
         }
 
-        // 6. Check for English learner mistakes if in English mode or user spoke English
-        val detectedMistake = if (currentMode == TutorMode.ENGLISH_TEACHER || lower.contains("agree") || lower.contains("people is")) {
+        // 7. Check for English learner mistakes
+        val detectedMistake = if (lower.contains("agree") || lower.contains("people is") || lang.code.startsWith("en")) {
             detectCommonMistake(trimmed)
         } else null
 
@@ -216,7 +213,16 @@ class CodeBrain(
             }
         }
 
-        // 7. Online Brain with Gemini (if API key available)
+        // 8. Grounding on user's downloaded Sources: Search library for matching topic/document
+        val matchingContent = repository.queryContentForDiscussion(trimmed)
+        if (matchingContent != null) {
+            return@withContext BrainResponse(
+                replyText = "$matchingContent Qu'aimerais-tu que je t'explique ou qu'on approfondisse ensemble ?",
+                isOfflineMode = true
+            )
+        }
+
+        // 9. Online Brain with Gemini (if API key available)
         val hasGemini = isOnline() && GeminiClient.hasValidApiKey()
         if (hasGemini) {
             try {
@@ -230,25 +236,8 @@ class CodeBrain(
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini API call failed, falling back to Web Search / Offline: ${e.message}")
+                Log.w(TAG, "Gemini API call failed, falling back to offline brain: ${e.message}")
             }
-        }
-
-        // 8. Fallback to Autonomous Live Web Search if user query has informational substance
-        if (isOnline() && (trimmed.contains("?") || trimmed.split(" ").size in 2..8)) {
-            val fallbackSearchResult = executeRealWebSearch(trimmed, lang)
-            if (fallbackSearchResult != null) {
-                return@withContext fallbackSearchResult
-            }
-        }
-
-        // 9. Offline Intelligence: Search downloaded library for matching topic/document
-        val matchingContent = repository.queryContentForDiscussion(trimmed)
-        if (matchingContent != null) {
-            return@withContext BrainResponse(
-                replyText = "$matchingContent Qu'aimerais-tu que je t'explique plus en détail ?",
-                isOfflineMode = true
-            )
         }
 
         // 10. General Conversational Response (Polyglot Friend & Omniscient Companion)

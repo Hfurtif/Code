@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         DownloadedKnowledge::class,
         DownloadedDocument::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

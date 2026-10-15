@@ -64,6 +64,9 @@ interface LearnedErrorDao {
     @Query("SELECT * FROM learned_errors ORDER BY count DESC, timestamp DESC")
     fun getAllErrors(): Flow<List<LearnedError>>
 
+    @Query("SELECT * FROM learned_errors")
+    suspend fun getAllErrorsSync(): List<LearnedError>
+
     @Query("SELECT * FROM learned_errors WHERE badPhrase = :phrase LIMIT 1")
     suspend fun findByPhrase(phrase: String): LearnedError?
 
@@ -121,6 +124,9 @@ interface KnowledgeDao {
     @Query("SELECT * FROM downloaded_knowledge ORDER BY downloadDate DESC")
     fun getAllKnowledge(): Flow<List<DownloadedKnowledge>>
 
+    @Query("SELECT * FROM downloaded_knowledge ORDER BY downloadDate DESC")
+    suspend fun getAllKnowledgeSync(): List<DownloadedKnowledge>
+
     @Query("SELECT * FROM downloaded_knowledge WHERE topic LIKE '%' || :query || '%' LIMIT 1")
     suspend fun findMatchingByTopic(query: String): DownloadedKnowledge?
 
@@ -147,6 +153,12 @@ interface KnowledgeDao {
 interface DocumentDao {
     @Query("SELECT * FROM downloaded_documents ORDER BY downloadDate DESC")
     fun getAllDocuments(): Flow<List<DownloadedDocument>>
+
+    @Query("SELECT COUNT(*) FROM downloaded_documents")
+    suspend fun getDocumentCount(): Int
+
+    @Query("SELECT * FROM downloaded_documents ORDER BY downloadDate DESC")
+    suspend fun getAllDocumentsSync(): List<DownloadedDocument>
 
     @Query("SELECT * FROM downloaded_documents WHERE title LIKE '%' || :query || '%' LIMIT 1")
     suspend fun findMatchingByTitle(query: String): DownloadedDocument?

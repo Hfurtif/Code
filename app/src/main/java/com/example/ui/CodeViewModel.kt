@@ -96,6 +96,9 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _infoBannerMessage = MutableStateFlow<String?>(null)
     val infoBannerMessage: StateFlow<String?> = _infoBannerMessage.asStateFlow()
 
+    private val _isIngestingSource = MutableStateFlow(false)
+    val isIngestingSource: StateFlow<Boolean> = _isIngestingSource.asStateFlow()
+
     // Database Flows
     val userProfile: StateFlow<UserProfile> = database.userDao().getUserProfile()
         .map { it ?: UserProfile() }
@@ -325,6 +328,72 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun ingestSourceFromUrl(url: String) {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isBlank()) return
+        viewModelScope.launch {
+            _isIngestingSource.value = true
+            _infoBannerMessage.value = "Téléchargement et analyse de la source..."
+            try {
+                val result = com.example.data.remote.SourceIngestionService.ingestFromUrl(cleanUrl)
+                brain.repository.saveIngestedSource(result)
+                _infoBannerMessage.value = "Source « ${result.title} » mémorisée avec succès !"
+                val spoken = "J'ai bien téléchargé et mémorisé ta source ${result.title}. Elle est disponible hors ligne !"
+                speak(spoken)
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error ingesting source", e)
+                _infoBannerMessage.value = "Impossible de récupérer ce lien pour l'instant."
+            } finally {
+                _isIngestingSource.value = false
+            }
+        }
+    }
+
+    fun ingestSourceFromText(title: String, content: String) {
+        val cleanContent = content.trim()
+        if (cleanContent.isBlank()) return
+        viewModelScope.launch {
+            _isIngestingSource.value = true
+            try {
+                val result = com.example.data.remote.SourceIngestionService.ingestFromDocumentText(title, cleanContent)
+                brain.repository.saveIngestedSource(result)
+                _infoBannerMessage.value = "Document « ${result.title} » mémorisé hors ligne !"
+                val spoken = "J'ai bien enregistré et appris ton document ${result.title}. Nous pouvons en discuter !"
+                speak(spoken)
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error saving document", e)
+                _infoBannerMessage.value = "Erreur lors de l'enregistrement du document."
+            } finally {
+                _isIngestingSource.value = false
+            }
+        }
+    }
+
+    fun deleteSourceDocument(doc: com.example.data.model.DownloadedDocument) {
+        viewModelScope.launch {
+            brain.repository.deleteDocument(doc)
+            _infoBannerMessage.value = "Source « ${doc.title} » supprimée."
+        }
+    }
+
+    fun startDiscussionOnSource(doc: com.example.data.model.DownloadedDocument) {
+        val comp = userProfile.value.companionName.ifBlank { "Code" }
+        val prompt = "Discutons de ta source « ${doc.title} ». J'ai bien mémorisé les informations clés : ${doc.summary}. Que souhaites-tu qu'on approfondisse ou analyse ensemble ?"
+        _liveCodeReply.value = prompt
+        speak(prompt)
+        viewModelScope.launch {
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = prompt,
+                    mode = _selectedMode.value.name,
+                    isWebSearch = false,
+                    webSearchTopic = doc.title
+                )
+            )
+        }
+    }
+
     fun showWebSearchDialog() {
         _webSearchDialogVisible.value = true
     }
@@ -391,20 +460,11 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             _liveUserTranscript.value = text
             _orbState.value = OrbState.THINKING
 
-            val isSearchIntent = com.example.data.remote.WebSearchService.extractSearchQuery(text) != null
-            if (isSearchIntent) {
-                _isWebSearching.value = true
-                _statusText.value = "🌐 Recherche sur Internet…"
+            val isUrl = com.example.data.remote.SourceIngestionService.extractUrl(text) != null
+            if (isUrl) {
+                _statusText.value = "📥 Analyse et mémorisation de la source…"
             } else {
                 _statusText.value = "Je réfléchis…"
-            }
-
-            // Check if user requested a structured lesson prep flow
-            val lower = text.lowercase()
-            if (lower.contains("apprends-moi") || lower.contains("fais-moi une leçon") || lower.contains("nouvelle leçon")) {
-                handleLessonPrepFlow()
-                _isWebSearching.value = false
-                return@launch
             }
 
             // Brain response

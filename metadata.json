@@ -1,6 +1,6 @@
 {
   "name": "Code",
-  "description": "Code - Compagnon personnel IA vocal tout-en-un avec prénom personnalisable (garçon, fille ou sur-mesure), recherche web autonome et apprentissage hors ligne",
+  "description": "Code - Compagnon personnel IA vocal avec prénom personnalisable (garçon, fille ou libre), apprentissage de sources (liens YouTube, TikTok, Web, documents) et discussion hors ligne",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

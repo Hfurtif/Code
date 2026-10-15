@@ -25,20 +25,14 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.TrendingUp
-import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.TrendingUp
 import androidx.compose.material.icons.outlined.ChatBubbleOutline
-import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.Storage
-import androidx.compose.material.icons.outlined.TrendingUp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.NavigationBar
@@ -70,12 +64,8 @@ import com.example.ui.CodeViewModel
 import com.example.ui.screens.CompanionNamingDialog
 import com.example.ui.screens.ConversationScreen
 import com.example.ui.screens.LanguageSelectionDialog
-import com.example.ui.screens.LessonsScreen
-import com.example.ui.screens.LevelTestDialog
-import com.example.ui.screens.ProgressScreen
 import com.example.ui.screens.SettingsScreen
-import com.example.ui.screens.StorageScreen
-import com.example.ui.screens.WebSearchDialog
+import com.example.ui.screens.SourcesScreen
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.MyApplicationTheme
@@ -91,9 +81,7 @@ sealed class NavTab(
     val unselectedIcon: ImageVector
 ) {
     object Conversation : NavTab("conversation", "Conversation", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
-    object Lessons : NavTab("lessons", "Apprendre", Icons.Filled.School, Icons.Outlined.School)
-    object Progress : NavTab("progress", "Progression", Icons.AutoMirrored.Filled.TrendingUp, Icons.AutoMirrored.Outlined.TrendingUp)
-    object Storage : NavTab("storage", "Stockage", Icons.Filled.Storage, Icons.Outlined.Storage)
+    object Sources : NavTab("sources", "Sources", Icons.Filled.Folder, Icons.Outlined.Folder)
     object Settings : NavTab("settings", "Réglages", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -117,12 +105,10 @@ class MainActivity : ComponentActivity() {
 fun MainAppContainer(viewModel: CodeViewModel) {
     val context = LocalContext.current
     var selectedTabIndex by remember { mutableIntStateOf(0) }
-    var showLevelTestDialog by remember { mutableStateOf(false) }
 
     val infoBanner by viewModel.infoBannerMessage.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val isLanguageDialogVisible by viewModel.isLanguageDialogVisible.collectAsState()
-    val isWebSearchDialogVisible by viewModel.webSearchDialogVisible.collectAsState()
     val isCompanionNamingDialogVisible by viewModel.isCompanionNamingDialogVisible.collectAsState()
     val showInitialCompanionNamingDialog = !userProfile.hasNamedCompanion
     val showInitialLanguageDialog = userProfile.hasNamedCompanion && !userProfile.hasSelectedInitialLanguage
@@ -154,9 +140,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
 
     val tabs = listOf(
         NavTab.Conversation,
-        NavTab.Lessons,
-        NavTab.Progress,
-        NavTab.Storage,
+        NavTab.Sources,
         NavTab.Settings
     )
 
@@ -188,7 +172,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                         label = {
                             Text(
                                 text = tab.title,
-                                fontSize = 10.sp,
+                                fontSize = 11.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
                                 color = if (isSelected) NeonCyan else TextSecondary
                             )
@@ -211,22 +195,14 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Screen Switcher
+            // Screen Switcher (3 Tabs: Conversation, Sources, Réglages)
             when (selectedTabIndex) {
                 0 -> ConversationScreen(viewModel = viewModel)
-                1 -> LessonsScreen(
+                1 -> SourcesScreen(
                     viewModel = viewModel,
                     onNavigateToConversation = { selectedTabIndex = 0 }
                 )
-                2 -> ProgressScreen(
-                    viewModel = viewModel,
-                    onLaunchLevelTest = { showLevelTestDialog = true }
-                )
-                3 -> StorageScreen(
-                    viewModel = viewModel,
-                    onNavigateToConversation = { selectedTabIndex = 0 }
-                )
-                4 -> SettingsScreen(viewModel = viewModel)
+                2 -> SettingsScreen(viewModel = viewModel)
             }
 
             // Info Banner Notification Overlay (if any info/error message)
@@ -261,14 +237,6 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 }
             }
 
-            // Level Test Modal Dialog
-            if (showLevelTestDialog) {
-                LevelTestDialog(
-                    viewModel = viewModel,
-                    onDismiss = { showLevelTestDialog = false }
-                )
-            }
-
             // Companion Naming Modal Dialog (First launch or manual change from Settings)
             if (showInitialCompanionNamingDialog || isCompanionNamingDialogVisible) {
                 CompanionNamingDialog(
@@ -296,16 +264,6 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                         viewModel.hideLanguageDialog()
                     },
                     isFirstLaunch = showInitialLanguageDialog
-                )
-            }
-
-            // Autonomous Web Search Modal Dialog
-            if (isWebSearchDialogVisible) {
-                WebSearchDialog(
-                    onDismiss = { viewModel.hideWebSearchDialog() },
-                    onSearch = { query ->
-                        viewModel.triggerWebSearch(query)
-                    }
                 )
             }
         }

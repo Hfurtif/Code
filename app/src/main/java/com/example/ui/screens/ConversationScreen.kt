@@ -145,54 +145,15 @@ fun ConversationScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "LILIAN",
+                        text = companionDisplayName.uppercase(),
                         color = NeonCyan,
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Black,
                         letterSpacing = 2.sp
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "AMI OMNISCIENT",
-                        color = NeonViolet,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.sp
-                    )
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Web Search Trigger Button
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showWebSearchDialog() }
-                            .padding(end = 6.dp)
-                            .testTag("top_web_search_button"),
-                        color = ElectricBlue.copy(alpha = 0.25f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Public,
-                                contentDescription = "Recherche Web",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Recherche Web",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-
                     // Language Switcher Button
                     Surface(
                         modifier = Modifier
@@ -255,75 +216,7 @@ fun ConversationScreen(
                 }
             }
 
-            // Mode Selector Chips
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                TutorMode.values().forEach { mode ->
-                    val isSelected = mode == currentMode
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(12.dp))
-                            .clickable { viewModel.setMode(mode) }
-                            .testTag("mode_chip_${mode.name.lowercase()}"),
-                        color = if (isSelected) mode.accentColor.copy(alpha = 0.25f) else DarkSurface,
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (isSelected) mode.accentColor else DarkCardBorder
-                        ),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            text = mode.title,
-                            color = if (isSelected) mode.accentColor else TextSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
-                        )
-                    }
-                }
-            }
-
-            // Pending tasks banner if any requests are waiting for internet
-            if (pendingTasks.isNotEmpty()) {
-                Surface(
-                    color = OfflineAmber.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.6f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 10.dp, vertical = 6.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "⏳ ${pendingTasks.size} recherche(s) en attente d'Internet",
-                            color = OfflineAmber,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                        if (isOnline) {
-                            TextButton(
-                                onClick = { viewModel.syncAllPendingTasks() },
-                                modifier = Modifier.padding(0.dp)
-                            ) {
-                                Text("Télécharger", color = SuccessGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Quick Knowledge / Download prompt chips
+            // Quick Knowledge & Progression conversation prompt chips
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -332,14 +225,11 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val quickIdeas = listOf(
-                    "🌐 Recherche le télescope James Webb",
-                    "🔍 Recherche l'intelligence artificielle",
-                    "🌌 Parle-moi des trous noirs",
-                    "🌍 C'est quoi le réchauffement climatique ?",
-                    "🏛 Raconte-moi l'histoire de Rome",
-                    "⚡ Explique-moi la relativité d'Einstein",
-                    "🧠 C'est quoi un biais cognitif ?",
-                    "📚 Télécharge un cours sur l'astronomie"
+                    "📈 Quel est mon niveau / ma progression ?",
+                    "📚 De quoi parlent mes sources ?",
+                    "🧠 Pose-moi une question sur mes sources",
+                    "💡 Aide-moi à réviser",
+                    "🗣 Parlons en anglais"
                 )
                 quickIdeas.forEach { idea ->
                     Surface(
@@ -353,8 +243,8 @@ fun ConversationScreen(
                         Text(
                             text = idea,
                             color = TextSecondary,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
                         )
                     }
                 }

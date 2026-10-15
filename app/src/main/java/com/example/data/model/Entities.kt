@@ -128,7 +128,9 @@ data class DownloadedDocument(
     val keywords: String,
     val downloadDate: Long = System.currentTimeMillis(),
     val sizeMb: Double = 3.2,
-    val isAvailableOffline: Boolean = true
+    val isAvailableOffline: Boolean = true,
+    val sourceUrl: String? = null,
+    val sourceType: String = "document" // "youtube", "tiktok", "web", "document"
 )
 
 

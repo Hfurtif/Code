@@ -110,6 +110,10 @@ object GeminiInstructionEngine {
                - Termine TOUJOURS par une question courte ou une relance complice pour dynamiser la conversation.
                - Règle anti-robot : Ne répète JAMAIS la question de l'utilisateur comme un perroquet.
 
+            5. SOURCES ET PROGRESSION :
+               - Lorsque $userName te pose une question ou aborde un thème, appuie-toi sur les sources (vidéos YouTube, TikTok, documents) qu'il a téléchargées dans son onglet Sources.
+               - Si $userName te demande où il en est ou son niveau, donne-lui son bilan de progression oralement avec bienveillance et enthousiasme.
+
             === DIRECTIVES SPÉCIFIQUES AU MODE ACTIF ===
             $pedagogicalDirective
         """.trimIndent()

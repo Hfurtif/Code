@@ -125,6 +125,60 @@ class OfflineKnowledgeRepository(
         database.resourceDao().markDeleted("document_${document.id}")
     }
 
+    suspend fun saveIngestedSource(source: com.example.data.remote.IngestedSourceResult): Long = withContext(Dispatchers.IO) {
+        val categoryName = when (source.type) {
+            "youtube" -> "YouTube 🎥"
+            "tiktok" -> "TikTok 📱"
+            "web" -> "Site Web 🌐"
+            else -> "Document 📄"
+        }
+
+        val doc = DownloadedDocument(
+            title = source.title,
+            authorOrSource = source.author,
+            topicCategory = categoryName,
+            summary = source.summary,
+            fullTextContent = source.fullContent,
+            keywords = source.keyPoints,
+            downloadDate = System.currentTimeMillis(),
+            sizeMb = source.sizeMb,
+            isAvailableOffline = true,
+            sourceUrl = source.sourceUrl,
+            sourceType = source.type
+        )
+
+        val id = database.documentDao().insertDocument(doc)
+
+        // Also register knowledge entity for faster contextual lookups
+        database.knowledgeDao().insertKnowledge(
+            DownloadedKnowledge(
+                topic = source.title,
+                category = categoryName,
+                summary = source.summary,
+                detailedContent = source.fullContent,
+                keyPoints = source.keyPoints,
+                sampleQuestions = "De quoi parle ${source.title} ?; Quels sont les points essentiels ?; Que retenir ?",
+                sizeMb = source.sizeMb,
+                isAvailableOffline = true
+            )
+        )
+
+        database.resourceDao().insertResource(
+            ResourcePack(
+                id = "document_$id",
+                name = "${categoryName}: ${source.title}",
+                type = "Source mémorisée",
+                sizeMb = source.sizeMb,
+                downloadDate = System.currentTimeMillis(),
+                lastUsedDate = System.currentTimeMillis(),
+                isDownloaded = true,
+                isProtected = false
+            )
+        )
+
+        id
+    }
+
     suspend fun storeSearchResultAsDocument(
         query: String,
         category: String,
