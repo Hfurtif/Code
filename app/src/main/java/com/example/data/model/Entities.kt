@@ -16,7 +16,7 @@ data class UserProfile(
     val voiceAccent: String = "en-US", // en-US, en-GB, fr-FR
     val speechRate: Float = 1.0f, // 0.6f to 1.4f
     val speechPitch: Float = 1.0f,
-    val continuousMode: Boolean = true,
+    val continuousMode: Boolean = false,
     val correctionFrequency: String = "normal", // often, normal, rare
     val explanationLang: String = "fr", // fr, en
     val hasCompletedOnboarding: Boolean = true,
@@ -29,7 +29,8 @@ data class UserProfile(
     val maxStorageLimitGb: Double = 20.0,
     val companionName: String = "Code",
     val companionGender: String = "neutral", // "boy", "girl", "neutral"
-    val hasNamedCompanion: Boolean = false
+    val hasNamedCompanion: Boolean = false,
+    val geminiApiKey: String = ""
 )
 
 @Entity(tableName = "conversations")

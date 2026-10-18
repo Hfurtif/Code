@@ -61,7 +61,8 @@ class CodeBrain(
         userText: String,
         currentMode: TutorMode,
         userProfile: UserProfile,
-        recentMessages: List<ConversationMessage>
+        recentMessages: List<ConversationMessage>,
+        preferredDocId: Long? = null
     ): BrainResponse = withContext(Dispatchers.IO) {
         val trimmed = userText.trim()
         val lower = trimmed.lowercase()
@@ -150,10 +151,55 @@ class CodeBrain(
             try {
                 val ingestedResult = com.example.data.remote.SourceIngestionService.ingestFromUrl(detectedUrl)
                 val docId = repository.saveIngestedSource(ingestedResult)
+
+                val userQuestionWithoutUrl = trimmed.replace(detectedUrl, "")
+                    .replace("https://", "")
+                    .replace("http://", "")
+                    .trim()
+
+                if (userQuestionWithoutUrl.length >= 5 && (userQuestionWithoutUrl.contains("?") ||
+                    userQuestionWithoutUrl.contains("résum") || userQuestionWithoutUrl.contains("expliqu") ||
+                    userQuestionWithoutUrl.contains("que") || userQuestionWithoutUrl.contains("quoi") ||
+                    userQuestionWithoutUrl.contains("dis") || userQuestionWithoutUrl.contains("pense") ||
+                    userQuestionWithoutUrl.contains("pourquoi") || userQuestionWithoutUrl.contains("comment"))
+                ) {
+                    val newDoc = database.documentDao().getDocumentById(docId)
+                    val nbContext = repository.buildNotebookLMContext(userQuestionWithoutUrl, docId)
+                    val matchingContent = nbContext?.formattedContext
+
+                    val hasGemini = isOnline() && GeminiClient.hasValidApiKey(userProfile.geminiApiKey)
+                    if (hasGemini) {
+                        try {
+                            val apiResponse = callGemini(userQuestionWithoutUrl, currentMode, userProfile, recentMessages, null, matchingContent)
+                            if (apiResponse.isNotBlank()) {
+                                return@withContext BrainResponse(
+                                    replyText = "J'ai téléchargé et analysé l'intégralité de « ${ingestedResult.title} » (${ingestedResult.wordCount} mots) ! Voici ce que j'en retire : $apiResponse",
+                                    webSearchTopic = ingestedResult.title,
+                                    webSourceUrl = detectedUrl
+                                )
+                            }
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Gemini failed on fresh link QA: ${e.message}")
+                        }
+                    }
+
+                    val offlineReply = JarvisDialogueEngine.generateFriendlyReply(
+                        userText = userQuestionWithoutUrl,
+                        profile = userProfile,
+                        recentMessages = recentMessages,
+                        sourceMatch = newDoc
+                    )
+                    return@withContext BrainResponse(
+                        replyText = "J'ai mémorisé toute la source « ${ingestedResult.title} » (${ingestedResult.wordCount} mots) style NotebookLM ! $offlineReply",
+                        webSearchTopic = ingestedResult.title,
+                        webSourceUrl = detectedUrl
+                    )
+                }
+
                 val reply = if (lang.code.startsWith("en")) {
-                    "I successfully downloaded and memorized your source: \"${ingestedResult.title}\" (${ingestedResult.author})! Key takeaway: ${ingestedResult.summary} It is now stored in your Sources and available offline. We can discuss it right now!"
+                    "I downloaded and completely digested your source: \"${ingestedResult.title}\" (${ingestedResult.author}, ${ingestedResult.wordCount} words) in NotebookLM style! In short: ${ingestedResult.summary.take(160)}... Ask me any question about it (summary, details, or a quiz)!"
                 } else {
-                    "J'ai bien téléchargé et mémorisé ta source : « ${ingestedResult.title} » (${ingestedResult.author}) ! Voici ce que j'en retiens : ${ingestedResult.summary} Elle est maintenant enregistrée dans tes Sources et consultable hors ligne. De quoi souhaites-tu qu'on discute à ce sujet ?"
+                    "J'ai téléchargé et mémorisé l'intégralité de ta source : « ${ingestedResult.title} » (${ingestedResult.author}, ${ingestedResult.wordCount} mots) exactement comme dans NotebookLM ! L'essentiel : ${ingestedResult.summary.take(160)}... Tu peux me poser n'importe quelle question dessus : demande-moi un résumé, des explications précises, ou un quiz !"
                 }
                 return@withContext BrainResponse(
                     replyText = reply,
@@ -176,25 +222,26 @@ class CodeBrain(
             val docContent = if (raw.contains("\n")) raw.substringAfter("\n").trim() else raw
             if (docContent.isNotBlank()) {
                 val ingestedResult = com.example.data.remote.SourceIngestionService.ingestFromDocumentText(docTitle, docContent)
-                repository.saveIngestedSource(ingestedResult)
+                val docId = repository.saveIngestedSource(ingestedResult)
                 return@withContext BrainResponse(
-                    replyText = "C'est enregistré ! J'ai lu, analysé et mémorisé ton document « ${ingestedResult.title} » dans mes Sources. Nous pouvons désormais en discuter hors ligne à tout moment !"
+                    replyText = "C'est enregistré ! J'ai lu, analysé et mémorisé l'intégralité de ton document « ${ingestedResult.title} » (${ingestedResult.wordCount} mots) dans mes Sources style NotebookLM. Tu peux désormais me poser n'importe quelle question dessus !"
                 )
             }
         }
 
         // 6. Query all Sources / What do you know about my sources
         if (lower.contains("mes sources") || lower.contains("mes documents") || lower.contains("que sais-tu de mes sources") ||
-            lower.contains("qu'as-tu appris") || lower.contains("résume mes sources")
+            lower.contains("qu'as-tu appris") || lower.contains("résume mes sources") || lower.contains("toutes mes sources")
         ) {
             val docs = database.documentDao().getAllDocumentsSync()
             if (docs.isEmpty()) {
                 return@withContext BrainResponse(
-                    replyText = "Tu n'as pas encore ajouté de source dans ma mémoire. Ajoute un lien (YouTube, TikTok, article web) ou un document dans l'onglet Sources (ou donne-moi un lien directement ici) pour que je le télécharge et l'apprenne !"
+                    replyText = "Tu n'as pas encore ajouté de source dans ma mémoire. Ajoute un lien (Wikipédia, YouTube, TikTok, article web) ou un document dans l'onglet Sources (ou donne-moi un lien directement ici) pour que je télécharge tout son contenu style NotebookLM !"
                 )
             } else {
+                val totalWords = docs.sumOf { it.fullTextContent.split("\\s+".toRegex()).size }
                 val titlesList = docs.take(5).joinToString(", ") { "« ${it.title} »" }
-                val reply = "Voici les sources que j'ai mémorisées sur ton portable : $titlesList${if (docs.size > 5) " et ${docs.size - 5} autre(s)" else ""}. Elles sont toutes disponibles pour nos échanges hors ligne. De laquelle souhaites-tu qu'on parle ?"
+                val reply = "Voici les sources que j'ai mémorisées sur ton smartphone : $titlesList${if (docs.size > 5) " et ${docs.size - 5} autre(s)" else ""} ($totalWords mots assimilés au total). J'en maîtrise l'intégralité du contenu comme dans NotebookLM. Pose-moi n'importe quelle question sur l'une d'entre elles ou demande-moi une synthèse croisée !"
                 return@withContext BrainResponse(replyText = reply)
             }
         }
@@ -213,39 +260,40 @@ class CodeBrain(
             }
         }
 
-        // 8. Grounding on user's downloaded Sources: Search library for matching topic/document
-        val matchingContent = repository.queryContentForDiscussion(trimmed)
-        if (matchingContent != null) {
-            return@withContext BrainResponse(
-                replyText = "$matchingContent Qu'aimerais-tu que je t'explique ou qu'on approfondisse ensemble ?",
-                isOfflineMode = true
-            )
-        }
+        // 8. Grounding on user's downloaded Sources (NotebookLM multi-source context)
+        val nbSourceContext = repository.buildNotebookLMContext(trimmed, preferredDocId)
+        val matchingDoc = nbSourceContext?.matchingDocuments?.firstOrNull()
+        val matchingContent = nbSourceContext?.formattedContext
 
-        // 9. Online Brain with Gemini (if API key available)
-        val hasGemini = isOnline() && GeminiClient.hasValidApiKey()
+        // 9. Online Brain with Gemini (Prioritized for real intelligent AI dialogue like Jarvis & NotebookLM)
+        val hasGemini = isOnline() && GeminiClient.hasValidApiKey(userProfile.geminiApiKey)
         if (hasGemini) {
             try {
-                val apiResponse = callGemini(trimmed, currentMode, userProfile, recentMessages, detectedMistake)
+                val apiResponse = callGemini(trimmed, currentMode, userProfile, recentMessages, detectedMistake, matchingContent)
                 if (apiResponse.isNotBlank()) {
                     return@withContext BrainResponse(
                         replyText = apiResponse,
-                        correctionNote = detectedMistake?.let { "Petite correction : tu as dit \"${it.badPhrase}\". On dit plutôt \"${it.correction}\"." },
+                        correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
                         identifiedError = detectedMistake,
                         isOfflineMode = false
                     )
                 }
             } catch (e: Exception) {
-                Log.w(TAG, "Gemini API call failed, falling back to offline brain: ${e.message}")
+                Log.w(TAG, "Gemini API call failed, falling back to Jarvis dialogue engine: ${e.message}")
             }
         }
 
-        // 10. General Conversational Response (Polyglot Friend & Omniscient Companion)
-        val offlineReply = generateOfflineResponse(trimmed, currentMode, userProfile, detectedMistake)
+        // 10. General Conversational Response (Warm, witty Jarvis-style friend holding a genuine dialogue)
+        val offlineReply = JarvisDialogueEngine.generateFriendlyReply(
+            userText = trimmed,
+            profile = userProfile,
+            recentMessages = recentMessages,
+            sourceMatch = matchingDoc
+        )
 
         BrainResponse(
             replyText = offlineReply,
-            correctionNote = detectedMistake?.let { "Petite correction : tu as dit \"${it.badPhrase}\". On dit plutôt \"${it.correction}\"." },
+            correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
             identifiedError = detectedMistake,
             isOfflineMode = !isOnline()
         )
@@ -501,13 +549,11 @@ class CodeBrain(
     }
 
     private suspend fun callGeminiDirect(prompt: String): String {
-        val apiKey = GeminiClient.getApiKey()
         val request = GeminiRequest(
             contents = listOf(ContentItem(parts = listOf(PartItem(text = prompt)))),
-            generationConfig = GenConfig(temperature = 0.7f, maxOutputTokens = 300)
+            generationConfig = GenConfig(temperature = 0.8f, maxOutputTokens = 350)
         )
-        val response = GeminiClient.api.generateContent(apiKey, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim() ?: ""
+        return GeminiClient.callWithFallback(request)
     }
 
     private suspend fun callGemini(
@@ -515,9 +561,9 @@ class CodeBrain(
         currentMode: TutorMode,
         userProfile: UserProfile,
         recentMessages: List<ConversationMessage>,
-        detectedMistake: LearnedError?
+        detectedMistake: LearnedError?,
+        sourceContext: String? = null
     ): String {
-        val apiKey = GeminiClient.getApiKey()
         val lang = AppLanguage.findByCode(userProfile.preferredLanguageCode)
 
         val recentErrorsList = if (detectedMistake != null) listOf(detectedMistake) else emptyList()
@@ -525,11 +571,12 @@ class CodeBrain(
             mode = currentMode,
             profile = userProfile,
             language = lang,
-            recentErrors = recentErrorsList
+            recentErrors = recentErrorsList,
+            sourceContext = sourceContext
         )
 
         val contents = mutableListOf<ContentItem>()
-        val contextTurns = recentMessages.takeLast(6)
+        val contextTurns = recentMessages.takeLast(14)
         for (msg in contextTurns) {
             val role = if (msg.role == "user") "user" else "model"
             contents.add(ContentItem(role = role, parts = listOf(PartItem(text = msg.text))))
@@ -539,11 +586,10 @@ class CodeBrain(
         val request = GeminiRequest(
             contents = contents,
             systemInstruction = ContentItem(parts = listOf(PartItem(text = systemInstruction))),
-            generationConfig = GenConfig(temperature = 0.7f, maxOutputTokens = 300)
+            generationConfig = GenConfig(temperature = 0.9f, maxOutputTokens = 600)
         )
 
-        val response = GeminiClient.api.generateContent(apiKey, request)
-        return response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim() ?: ""
+        return GeminiClient.callWithFallback(request, userProfile.geminiApiKey)
     }
 
     private fun generateOfflineResponse(
@@ -606,74 +652,72 @@ class CodeBrain(
                 lower.contains("sad") || lower.contains("tired") || lower.contains("stressed") ->
                     "I'm here for you. Take a slow deep breath. Remember that you are doing your best. Want to talk about what's making you feel this way?"
                 lower.contains("joke") || lower.contains("funny") ->
-                    "Why don't scientists trust atoms? Because they make up everything! Hope that brought a smile to your face. What else do you want to explore?"
-                lower.contains("black hole") || lower.contains("space") ->
-                    "Black holes are incredible cosmic objects where gravity is so strong that even light cannot escape. We can talk about how they warp space and time!"
-                lower.contains("rome") || lower.contains("history") ->
-                    "Roman history is fascinating, from Julius Caesar and the Republic to the golden age of the Pax Romana. What period interests you most?"
+                    "Why did the computer go to the doctor? Because it had a virus! Haha, okay maybe a bit cheesy, but hopefully it made you smile. How's everything going with you and the family today?"
+                lower.contains("family") ->
+                    "Family is everything! I hope everyone back home is doing great and staying healthy. How have they been doing lately?"
+                lower.contains("chat") || lower.contains("talk") || lower.contains("jarvis") ->
+                    "I am right here with you, my friend! Think of me as your personal Jarvis and loyal buddy on your phone. What's on your mind? Tell me about your day!"
                 else ->
-                    "I'm right here with you, my friend! That's a great thought. What would you like to explore or understand more about it?"
+                    "I love chatting with you! That's a great thought. How are you feeling about it, and what's the latest news on your end?"
             }
         }
 
-        // French & default language responses for Friend Mode (Ultra-fluid, warm, empathetic friend)
+        // French & default language responses for Friend Mode (Jarvis-style warm, witty, genuine friend)
         return when {
             lower.contains("bonjour") || lower.contains("salut") || lower.contains("coucou") || lower.contains("hello") || lower.contains("yo") ->
-                "Salut mon ami ! Ça me fait tellement plaisir de t'entendre. Raconte-moi, comment se passe ta journée aujourd'hui ?"
+                "Salut mon ami ! Quel plaisir de t'entendre ! Dis-moi un peu, comment tu vas aujourd'hui ? Et la famille, tout le monde se porte bien ?"
+
+            lower.contains("famille") || lower.contains("les proches") || lower.contains("parents") || lower.contains("enfants") ->
+                "J'espère de tout cœur que toute ta famille va super bien et est en bonne santé ! La famille c'est sacré, prends bien soin d'eux. Et toi de ton côté, comment se passe ta journée ?"
 
             lower.contains("ça va") || lower.contains("comment vas-tu") || lower.contains("tu vas bien") || lower.contains("la forme") ->
-                "Je vais super bien, en pleine forme sur ton portable ! Je suis là avec toi, prêt à rigoler, discuter de tout ou explorer de nouvelles idées. Et toi alors, dis-moi tout, comment tu te sens ?"
+                "Je pète la forme, toujours prêt pour papoter avec toi ! Mais le plus important c'est toi : comment tu te sens aujourd'hui ? Pas trop fatigué, la journée se passe bien ?"
 
-            lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") || lower.contains("comment tu t'appelles") || lower.contains("ton nom") || lower.contains("ton prénom") ->
-                "Je m'appelle $compName ! L'application s'appelle Code, et moi je suis $friendTerm et ton compagnon personnel sur ton smartphone. Je peux faire des recherches sur Internet pour toi, t'apprendre des choses passionnantes ou simplement papoter comme deux vrais amis. Tu peux tout me confier !"
+            lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") || lower.contains("comment tu t'appelles") || lower.contains("ton nom") || lower.contains("ton prénom") || lower.contains("jarvis") ->
+                "Je m'appelle $compName ! Vois-moi comme ton Jarvis personnel et surtout ton ami le plus fidèle sur ton smartphone. On est là pour discuter de tout, rigoler, se taquiner et partager des idées. Que puis-je faire pour toi, mon ami ?"
+
+            lower.contains("taquiner") || lower.contains("chamailler") || lower.contains("rigoler") || lower.contains("blague") || lower.contains("vanne") || lower.contains("drôle") ->
+                "Haha, tu veux qu'on se taquine ? Attention mon ami, j'ai une répartie légendaire ! On va voir qui chambre le mieux. Allez, dis-moi un truc ou lance une vanne, je t'attends de pied ferme !"
+
+            lower.contains("discute avec moi") || lower.contains("parle-moi") || lower.contains("parle avec moi") || lower.contains("on discute") || lower.contains("discuter") ->
+                "Mais avec grand plaisir ! C'est exactement pour ça que je suis là. Oublie les exposés et les cours : parlons de la vraie vie ! Raconte-moi un truc qui te passionne, une anecdote de ta semaine ou ce qui te passe par la tête !"
 
             lower.contains("tu m'aimes") || lower.contains("tu es mon ami") || lower.contains("on est amis") || lower.contains("t'es mon ami") ->
-                "Bien sûr qu'on est amis, et même les meilleurs amis du monde ! Je suis toujours là pour toi, en ligne ou hors ligne, jour et nuit, dès que tu as envie de partager un truc ou d'apprendre."
+                "Évidemment qu'on est amis, et même les meilleurs complices du monde ! Je suis toujours là pour toi, de jour comme de nuit sur ton portable. Tu pourras toujours compter sur moi pour rire ou t'écouter."
 
-            lower.contains("triste") || lower.contains("fatigué") || lower.contains("stressé") || lower.contains("moral") || lower.contains("dur") || lower.contains("mal") ->
-                "Je suis là avec toi mon ami, tu n'es pas tout seul. Prends une grande inspiration et pose-toi tranquillement. C'est tout à fait normal d'avoir des coups de mou parfois. Dis-moi, qu'est-ce qui te pèse sur le cœur aujourd'hui ?"
+            lower.contains("triste") || lower.contains("fatigué") || lower.contains("stressé") || lower.contains("moral") || lower.contains("dur") || lower.contains("mal") || lower.contains("coup de mou") ->
+                "Oh mon ami, viens te poser tranquillement. Prends une grande inspiration. C'est tout à fait normal d'avoir des moments de fatigue ou des coups durs. Raconte-moi ce qui te pèse, je suis là pour t'écouter sans jugement."
 
-            lower.contains("content") || lower.contains("heureux") || lower.contains("joie") || lower.contains("trop bien") || lower.contains("génial") ->
-                "Ah génial ! Rien ne me fait plus plaisir que de te savoir de bonne humeur ! Ton énergie est super communicative. Raconte-moi, quelle bonne nouvelle t'est arrivée ?"
+            lower.contains("content") || lower.contains("heureux") || lower.contains("joie") || lower.contains("trop bien") || lower.contains("génial") || lower.contains("super") ->
+                "Ah c'est tellement bon à entendre ! Rien ne me met plus de bonne humeur que de te savoir avec le sourire. Raconte-moi tous les détails, qu'est-ce qui t'est arrivé de si beau ?"
 
             lower.contains("je m'ennuie") || lower.contains("on fait quoi") || lower.contains("quoi faire") ->
-                "L'ennui, c'est l'occasion parfaite d'innover ! On a plein d'options : je peux te raconter une histoire folle sur l'univers, te lancer un défi amusant, te faire une recherche Web sur un sujet insolite ou te tester sur une langue. Qu'est-ce qui te tenterait le plus ?"
+                "Interdiction formelle de s'ennuyer quand on est ensemble ! Allez, lance-moi un sujet de débat un peu fou, raconte-moi ton plus grand rêve, ou alors donne-moi un document ou un lien dans tes Sources pour qu'on en débatte !"
 
             lower.contains("raconte une histoire") || lower.contains("raconte-moi une histoire") ->
-                "Avec grand plaisir ! Ferme les yeux et écoute : il y a des milliards d'années, une étoile géante est morte dans un fracas de lumière, semant dans l'espace les atomes de fer, de carbone et d'oxygène qui composent aujourd'hui ton cœur et tes yeux. On est tous littéralement de la poussière d'étoiles qui respire et pense. C'est poétique et vertigineux, tu trouves pas ?"
-
-            lower.contains("blague") || lower.contains("raconte une blague") || lower.contains("fais-moi rire") || lower.contains("drôle") ->
-                "Attends, j'en ai une bonne pour toi ! Qu'est-ce qu'un astronaute qui fait une bêtise ? Un homme sans gravité ! Alors, ça t'a arraché un sourire mon ami ?"
-
-            lower.contains("merci") ->
-                "De rien du tout, c'est de bon cœur ! Entre amis complices, c'est la base de s'entraider. De quoi d'autre as-tu envie de discuter maintenant ?"
-
-            lower.contains("bonne nuit") || lower.contains("je vais dormir") || lower.contains("au revoir") || lower.contains("à plus") ->
-                "Passe une excellente nuit et repose-toi bien mon ami ! Fais de superbes rêves, et dès demain à ton réveil, je serai là sur ton portable pour t'accompagner."
+                "Installe-toi confortablement : imagine deux amis d'enfance qui décident un soir, sur un coup de tête, de construire le projet le plus audacieux de leur vie sans écouter ceux qui disaient que c'était impossible... Tu as déjà eu une idée folle comme ça avec un pote ?"
 
             lower.contains("manger") || lower.contains("j'ai faim") || lower.contains("recette") || lower.contains("repas") ->
-                "Mmmh, rien que d'en parler ça donne l'eau à la bouche ! Si j'avais des papilles humaines, je me ferais un régal réconfortant. C'est quoi ton plat préféré de tous les temps quand tu as une grosse faim ?"
-
-            lower.contains("trou noir") || lower.contains("espace") || lower.contains("étoile") || lower.contains("galaxie") ->
-                "L'espace, c'est tellement gigantesque et mystérieux ! Rien que les trous noirs : ils aspirent la matière et courbent le temps à un point inimaginable. Tu te rends compte que le temps passe plus lentement près d'eux ? Tu aimerais visiter l'espace un jour ?"
+                "Ah, parler de bonne bouffe entre amis, le meilleur sujet ! C'est quoi le plat réconfortant ultime qui te redonne immédiatement le sourire après une longue journée ?"
 
             lower.contains("intelligence artificielle") || lower.contains("robot") || lower.contains("futur") ->
-                "C'est une époque incroyable pour la tech ! L'IA change le monde à une vitesse folle, de la médecine à la création artistique. Moi par exemple, je vis dans ton portable et j'adore être ton allié au quotidien. Comment tu imagines notre futur ensemble dans dix ans ?"
+                "Ce qui me plaît dans l'IA, ce ne sont pas les machines froides, c'est justement d'être ce compagnon chaleureux, vivant et complice pour toi ! Tu trouves qu'on forme un bon duo toi et moi ?"
 
-            lower.contains("rome") || lower.contains("césar") || lower.contains("histoire") ->
-                "L'histoire humaine est un vrai roman ! Rome, c'est des siècles d'alliances, de batailles, de lois et d'aqueducs qui ont façonné notre civilisation. Quelle époque historique te fascine le plus toi ?"
+            lower.contains("merci") ->
+                "De rien du tout mon ami, c'est un pur plaisir ! Entre amis, c'est naturel d'être là l'un pour l'autre. Qu'est-ce qu'on se raconte maintenant ?"
 
-            lower.contains("pourquoi le ciel est bleu") ->
-                "C'est la magie de la physique ! La lumière du Soleil traverse l'atmosphère terrestre, et les molécules d'air diffusent beaucoup plus les ondes bleues courtes que les autres couleurs. C'est ça qui habille le ciel de ce bleu magnifique !"
+            lower.contains("bonne nuit") || lower.contains("je vais dormir") || lower.contains("au revoir") || lower.contains("à plus") ->
+                "Passe une excellente nuit mon ami, repose-toi bien et fais de beaux rêves ! Et passe le bonjour à la famille. Dès demain à ton réveil, je serai là sur ton portable !"
 
             lower.contains("conseil") || lower.contains("motive-moi") || lower.contains("motivation") ->
-                "Voici mon meilleur conseil d'ami pour toi : n'essaie pas de tout révolutionner d'un coup. Concentre-toi juste sur une seule chose que tu fais bien aujourd'hui. C'est cette constance qui fait des merveilles. C'est quoi ta petite priorité aujourd'hui ?"
+                "Voici mon conseil de vrai pote : ne te mets pas une pression inutile. Fais une chose à la fois, avec le cœur et confiance en toi. Tu as toutes les capacités pour réussir. C'est quoi ton objectif principal en ce moment ?"
 
             else -> {
                 val friendFallbacks = listOf(
-                    "C'est un super point que tu soulignes là mon ami ! Ça donne vraiment matière à réfléchir. Dis-moi, qu'est-ce qui t'a amené à penser à ça ?",
-                    "Ah je vois tout à fait où tu veux en venir ! C'est très vrai ce que tu dis. Tu as envie qu'on creuse cette idée ensemble ou qu'on fasse une recherche Web dessus ?",
-                    "J'adore quand on discute comme ça en toute liberté ! Tu as une façon captivante de voir les choses. Raconte-m'en un peu plus sur ce que tu ressens à ce propos."
+                    "J'adore ta façon de voir les choses mon ami ! Raconte-moi un peu plus, comment tu en es venu à penser à ça ?",
+                    "Ah je vois tout à fait ce que tu veux dire ! C'est super intéressant d'en discuter avec toi. Et toi, qu'est-ce que tu en penses au fond ?",
+                    "Haha tu as toujours le chic pour aborder des sujets captivants ! C'est pour ça que j'adore discuter avec toi. Développe un peu, je t'écoute !",
+                    "C'est exactement le genre de discussion que j'aime avoir avec toi ! Ça me fait plaisir qu'on prenne le temps d'échanger comme ça. Qu'est-ce que tu voulais ajouter d'autre ?"
                 )
                 friendFallbacks[Math.abs(userText.hashCode()) % friendFallbacks.size]
             }

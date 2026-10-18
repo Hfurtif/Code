@@ -1,6 +1,11 @@
 package com.example.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -27,13 +32,22 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Public
@@ -41,6 +55,7 @@ import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -105,18 +120,44 @@ fun ConversationScreen(
     val currentMode by viewModel.selectedMode.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
+    val recordingDuration by viewModel.recordingDurationSeconds.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
     val isHistoryVisible by viewModel.isHistoryVisible.collectAsState()
-    val lessonPrep by viewModel.activeLessonPrep.collectAsState()
+    val isIngestingSource by viewModel.isIngestingSource.collectAsState()
     val storagePromptResource by viewModel.storagePromptResource.collectAsState()
     val allMessages by viewModel.allMessages.collectAsState()
     val pendingTasks by viewModel.pendingTasks.collectAsState()
-    val isWebSearching by viewModel.isWebSearching.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val activeSource by viewModel.activeSourceForDiscussion.collectAsState()
     val companionDisplayName = userProfile.companionName.ifBlank { "Code" }
 
     var textInput by remember { mutableStateOf("") }
+    var showAddSourceDialog by remember { mutableStateOf(false) }
     val historyListState = rememberLazyListState()
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.ingestDeviceFiles(uris)
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.ingestDeviceFiles(uris)
+        }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            viewModel.ingestDeviceFolder(treeUri)
+        }
+    }
 
     LaunchedEffect(allMessages.size) {
         if (allMessages.isNotEmpty()) {
@@ -216,6 +257,76 @@ fun ConversationScreen(
                 }
             }
 
+            // Active Source Grounding Card (NotebookLM Mode)
+            activeSource?.let { src ->
+                Surface(
+                    color = NeonCyan.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Source active : « ${src.title} »",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.clearActiveSource() },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(Icons.Default.Close, contentDescription = "Détacher", tint = TextMuted, modifier = Modifier.size(14.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(
+                                "💡 Résumer" to "summary",
+                                "🎯 Quiz" to "quiz",
+                                "🔍 Points clés" to "key_points",
+                                "❓ Expliquer" to "explain"
+                            ).forEach { (label, qType) ->
+                                Surface(
+                                    color = DarkSurface,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { viewModel.startDiscussionOnSource(src, qType) }
+                                ) {
+                                    Text(
+                                        text = label,
+                                        color = NeonCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Quick Knowledge & Progression conversation prompt chips
             Row(
                 modifier = Modifier
@@ -225,17 +336,25 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val quickIdeas = listOf(
-                    "📈 Quel est mon niveau / ma progression ?",
-                    "📚 De quoi parlent mes sources ?",
-                    "🧠 Pose-moi une question sur mes sources",
-                    "💡 Aide-moi à réviser",
-                    "🗣 Parlons en anglais"
+                    "📚 Interroger mes sources (NotebookLM)",
+                    "📁 De quoi parlent mes sources ?",
+                    "👋 Salut mon ami ! Comment tu vas ?",
+                    "👨‍👩‍👧 Comment va la famille chez toi ?",
+                    "😂 Raconte-moi une blague !",
+                    "🥊 Allez, viens on se taquine un peu !",
+                    "💭 Tu penses quoi de l'avenir ?"
                 )
                 quickIdeas.forEach { idea ->
                     Surface(
                         modifier = Modifier
                             .clip(RoundedCornerShape(8.dp))
-                            .clickable { viewModel.processInput(idea) },
+                            .clickable {
+                                if (idea.startsWith("📚 Interroger")) {
+                                    viewModel.queryAllSources()
+                                } else {
+                                    viewModel.processInput(idea)
+                                }
+                            },
                         color = DarkSurfaceVariant.copy(alpha = 0.8f),
                         border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
                         shape = RoundedCornerShape(8.dp)
@@ -399,41 +518,9 @@ fun ConversationScreen(
 
                     Spacer(modifier = Modifier.height(10.dp))
 
-                    // Lesson Prep Indicator (if preparing lesson)
+                    // Local Source Ingestion & Learning Indicator
                     AnimatedVisibility(
-                        visible = !lessonPrep.isNullOrBlank(),
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        lessonPrep?.let { prepStep ->
-                            GlassCard(
-                                modifier = Modifier
-                                    .fillMaxWidth(0.9f)
-                                    .padding(vertical = 4.dp),
-                                cornerRadius = 12.dp,
-                                borderColor = NeonCyan
-                            ) {
-                                Column(modifier = Modifier.padding(10.dp)) {
-                                    Text(
-                                        text = prepStep,
-                                        color = NeonCyan,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Spacer(modifier = Modifier.height(6.dp))
-                                    LinearProgressIndicator(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        color = NeonCyan,
-                                        trackColor = DarkSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    // Live Web Searching Banner (if actively querying the Internet)
-                    AnimatedVisibility(
-                        visible = isWebSearching,
+                        visible = isIngestingSource,
                         enter = fadeIn() + expandVertically(),
                         exit = fadeOut() + shrinkVertically()
                     ) {
@@ -446,15 +533,14 @@ fun ConversationScreen(
                         ) {
                             Column(modifier = Modifier.padding(12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(
-                                        imageVector = Icons.Default.Public,
-                                        contentDescription = null,
-                                        tint = NeonCyan,
-                                        modifier = Modifier.size(16.dp)
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(16.dp),
+                                        color = NeonCyan,
+                                        strokeWidth = 2.dp
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Recherche en direct sur Internet en cours…",
+                                        text = "Mémorisation et apprentissage de ta source…",
                                         color = NeonCyan,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
@@ -462,7 +548,7 @@ fun ConversationScreen(
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
-                                    text = "$companionDisplayName explore les sources du Web pour t'informer et mémoriser le sujet.",
+                                    text = "$companionDisplayName apprend ce contenu pour que vous puissiez en discuter !",
                                     color = TextSecondary,
                                     fontSize = 11.sp
                                 )
@@ -624,124 +710,273 @@ fun ConversationScreen(
                     .padding(bottom = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Action Buttons Row: Stop speaking, Main Mic, Repeat last, History toggle
+                val infiniteTransition = rememberInfiniteTransition(label = "recordingPulse")
+                val pulseScale by infiniteTransition.animateFloat(
+                    initialValue = 1f,
+                    targetValue = 1.16f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(650),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulseScale"
+                )
+                val pulseAlpha by infiniteTransition.animateFloat(
+                    initialValue = 0.35f,
+                    targetValue = 0.95f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(650),
+                        repeatMode = RepeatMode.Reverse
+                    ),
+                    label = "pulseAlpha"
+                )
+
+                // WhatsApp-style Vocal Recording Bar (Visible when isListening)
+                AnimatedVisibility(
+                    visible = isListening,
+                    enter = fadeIn() + expandVertically(),
+                    exit = fadeOut() + shrinkVertically()
+                ) {
+                    val minutes = recordingDuration / 60
+                    val seconds = recordingDuration % 60
+                    val formattedTime = "%02d:%02d".format(minutes, seconds)
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Surface(
+                            color = AlertPink.copy(alpha = 0.18f),
+                            shape = RoundedCornerShape(18.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.5.dp, AlertPink.copy(alpha = 0.7f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(12.dp)
+                                                .clip(CircleShape)
+                                                .background(AlertPink.copy(alpha = pulseAlpha))
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            text = formattedTime,
+                                            color = AlertPink,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 15.sp
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "Écoute continue illimitée (ne se coupe jamais)",
+                                            color = TextPrimary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+
+                                    // Discard / Cancel Recording
+                                    IconButton(
+                                        onClick = { viewModel.cancelRecording() },
+                                        modifier = Modifier.size(32.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Annuler l'enregistrement",
+                                            tint = AlertPink,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+
+                                if (liveTranscript.isNotBlank()) {
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Text(
+                                        text = "« $liveTranscript »",
+                                        color = TextPrimary,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        maxLines = 4,
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Prends ton temps, parle et fais des pauses librement. C'est toi qui réappuieras pour envoyer !",
+                                        color = TextMuted,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Action Buttons Row with Huge Center Microphone
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 6.dp),
+                        .padding(vertical = 4.dp, horizontal = 4.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // History Toggle Button
-                    IconButton(
-                        onClick = { viewModel.toggleHistory() },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(DarkSurfaceVariant)
-                            .border(1.dp, DarkCardBorder, CircleShape)
-                            .testTag("history_toggle_button")
+                    // Left Column: History & Stop Speaking
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.History,
-                            contentDescription = "Historique",
-                            tint = if (isHistoryVisible) NeonCyan else TextSecondary
-                        )
-                    }
-
-                    // Stop Speaking Button (Active when speaking)
-                    IconButton(
-                        onClick = { viewModel.stopSpeaking() },
-                        enabled = isSpeaking,
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(if (isSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurfaceVariant.copy(alpha = 0.5f))
-                            .border(1.dp, if (isSpeaking) AlertPink else DarkCardBorder, CircleShape)
-                            .testTag("stop_speaking_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Stop,
-                            contentDescription = "Interrompre $companionDisplayName",
-                            tint = if (isSpeaking) AlertPink else TextMuted
-                        )
-                    }
-
-                    // Central Big Microphone Button
-                    Surface(
-                        modifier = Modifier
-                            .size(76.dp)
-                            .clip(CircleShape)
-                            .clickable { viewModel.toggleListening() }
-                            .testTag("main_mic_button"),
-                        color = if (isListening) NeonCyan else ElectricBlue,
-                        shape = CircleShape,
-                        shadowElevation = 8.dp,
-                        border = androidx.compose.foundation.BorderStroke(
-                            3.dp,
-                            if (isListening) Color.White else NeonCyan.copy(alpha = 0.7f)
-                        )
-                    ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
+                        // History Toggle Button
+                        IconButton(
+                            onClick = { viewModel.toggleHistory() },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(DarkSurfaceVariant)
+                                .border(1.dp, DarkCardBorder, CircleShape)
+                                .testTag("history_toggle_button")
                         ) {
                             Icon(
-                                imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                                contentDescription = "Microphone",
-                                tint = if (isListening) DarkBackground else Color.White,
-                                modifier = Modifier.size(34.dp)
+                                imageVector = Icons.Default.History,
+                                contentDescription = "Historique",
+                                tint = if (isHistoryVisible) NeonCyan else TextSecondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // Stop Speaking Button (Active when speaking)
+                        IconButton(
+                            onClick = { viewModel.stopSpeaking() },
+                            enabled = isSpeaking,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(if (isSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurfaceVariant.copy(alpha = 0.5f))
+                                .border(1.dp, if (isSpeaking) AlertPink else DarkCardBorder, CircleShape)
+                                .testTag("stop_speaking_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Stop,
+                                contentDescription = "Interrompre $companionDisplayName",
+                                tint = if (isSpeaking) AlertPink else TextMuted,
+                                modifier = Modifier.size(22.dp)
                             )
                         }
                     }
 
-                    // Repeat Button
-                    IconButton(
-                        onClick = { viewModel.repeatLastReply() },
-                        modifier = Modifier
-                            .size(48.dp)
-                            .clip(CircleShape)
-                            .background(DarkSurfaceVariant)
-                            .border(1.dp, DarkCardBorder, CircleShape)
-                            .testTag("repeat_reply_button")
+                    // Central Hero Microphone Button (96dp - Highly visible & easy to tap)
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
-                        Icon(
-                            imageVector = Icons.Default.Replay,
-                            contentDescription = "Répéter la réponse",
-                            tint = NeonViolet
-                        )
+                        if (isListening) {
+                            // Pulsating glowing outer ring when recording
+                            Box(
+                                modifier = Modifier
+                                    .size((96 * pulseScale).dp)
+                                    .clip(CircleShape)
+                                    .background(AlertPink.copy(alpha = 0.28f))
+                            )
+                        }
+
+                        Surface(
+                            modifier = Modifier
+                                .size(96.dp)
+                                .clip(CircleShape)
+                                .clickable { viewModel.toggleListening() }
+                                .testTag("main_mic_button"),
+                            color = if (isListening) AlertPink else ElectricBlue,
+                            shape = CircleShape,
+                            shadowElevation = 14.dp,
+                            border = androidx.compose.foundation.BorderStroke(
+                                4.dp,
+                                if (isListening) Color.White else NeonCyan
+                            )
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector = if (isListening) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
+                                    contentDescription = if (isListening) "Envoyer le message vocal" else "Parler à $companionDisplayName",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Right Column: Repeat & Add Sources
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Repeat Button
+                        IconButton(
+                            onClick = { viewModel.repeatLastReply() },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(DarkSurfaceVariant)
+                                .border(1.dp, DarkCardBorder, CircleShape)
+                                .testTag("repeat_reply_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Replay,
+                                contentDescription = "Répéter la réponse",
+                                tint = NeonViolet,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
+
+                        // Add Sources button (Documents, Images, Folders, Links)
+                        IconButton(
+                            onClick = { showAddSourceDialog = true },
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(CircleShape)
+                                .background(NeonCyan.copy(alpha = 0.2f))
+                                .border(1.dp, NeonCyan.copy(alpha = 0.6f), CircleShape)
+                                .testTag("add_source_chat_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AttachFile,
+                                contentDescription = "Ajouter des Sources du téléphone",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(4.dp))
+                // Helper indicator text directly under the big mic button
+                Text(
+                    text = if (isListening) "🔴 Écoute active… Réappuie UNIQUEMENT quand tu as fini pour envoyer !" else "Appuie sur le gros micro pour parler à $companionDisplayName 🎙️",
+                    color = if (isListening) AlertPink else NeonCyan,
+                    fontSize = 11.sp,
+                    fontWeight = if (isListening) FontWeight.Bold else FontWeight.Medium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(vertical = 3.dp)
+                )
+
+                Spacer(modifier = Modifier.height(2.dp))
 
                 // Text Input Bar with Send Button
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    IconButton(
-                        onClick = { viewModel.showWebSearchDialog() },
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(ElectricBlue.copy(alpha = 0.2f))
-                            .border(1.dp, NeonCyan.copy(alpha = 0.5f), CircleShape)
-                            .testTag("open_web_search_input_button")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Public,
-                            contentDescription = "Recherche Web",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                    Spacer(modifier = Modifier.width(6.dp))
-
                     OutlinedTextField(
                         value = textInput,
                         onValueChange = { textInput = it },
-                        placeholder = { Text("Écris ou recherche…", color = TextMuted, fontSize = 12.sp) },
+                        placeholder = { Text("Ou écris un message à $companionDisplayName…", color = TextMuted, fontSize = 12.sp) },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("chat_text_input"),
@@ -765,7 +1000,7 @@ fun ConversationScreen(
                             }
                         },
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(46.dp)
                             .clip(CircleShape)
                             .background(NeonCyan)
                             .testTag("send_message_button")
@@ -773,11 +1008,228 @@ fun ConversationScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.Send,
                             contentDescription = "Envoyer",
-                            tint = DarkBackground
+                            tint = DarkBackground,
+                            modifier = Modifier.size(20.dp)
                         )
                     }
                 }
             }
         }
+
+        // Modal Dialog to add Sources (Documents, Images, Folders, Links) directly
+        if (showAddSourceDialog) {
+            AddSourceModalDialog(
+                companionName = companionDisplayName,
+                onPickDocuments = {
+                    showAddSourceDialog = false
+                    documentPickerLauncher.launch(
+                        arrayOf(
+                            "application/pdf",
+                            "text/*",
+                            "application/msword",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/json",
+                            "*/*"
+                        )
+                    )
+                },
+                onPickImages = {
+                    showAddSourceDialog = false
+                    photoPickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                onPickFolder = {
+                    showAddSourceDialog = false
+                    folderPickerLauncher.launch(null)
+                },
+                onAddLink = { url ->
+                    showAddSourceDialog = false
+                    viewModel.ingestSourceFromUrl(url)
+                },
+                onDismiss = { showAddSourceDialog = false }
+            )
+        }
     }
+}
+
+@Composable
+private fun AddSourceModalDialog(
+    companionName: String,
+    onPickDocuments: () -> Unit,
+    onPickImages: () -> Unit,
+    onPickFolder: () -> Unit,
+    onAddLink: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var linkInput by remember { mutableStateOf("") }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AttachFile, contentDescription = null, tint = NeonCyan)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Ajouter des Sources à $companionName",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Choisis un document, une image, un dossier de ton téléphone ou donne un lien pour que $companionName l'apprenne et en discute avec toi :",
+                    color = TextSecondary,
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+
+                // 1. Documents picker button
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onPickDocuments() },
+                    color = DarkSurfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = NeonCyan.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Documents du téléphone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("PDF, Word, TXT, Code, JSON…", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // 2. Images picker button
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onPickImages() },
+                    color = DarkSurfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = NeonViolet.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Image, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Images & Photos de la galerie", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Photos, captures d'écran, schémas…", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // 3. Folder picker button
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { onPickFolder() },
+                    color = DarkSurfaceVariant,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = CircleShape,
+                            color = ElectricBlue.copy(alpha = 0.15f),
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(Icons.Default.Folder, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(20.dp))
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column {
+                            Text("Dossier complet du téléphone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text("Importer tous les fichiers d'un répertoire", color = TextMuted, fontSize = 11.sp)
+                        }
+                    }
+                }
+
+                // 4. Link Input (YouTube, TikTok, Web)
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    Text("Ou coller un lien (YouTube, TikTok, Web) :", color = TextSecondary, fontSize = 11.sp)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = linkInput,
+                            onValueChange = { linkInput = it },
+                            placeholder = { Text("https://...", color = TextMuted, fontSize = 11.sp) },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(10.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedContainerColor = DarkSurfaceVariant,
+                                unfocusedContainerColor = DarkSurfaceVariant
+                            )
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Button(
+                            onClick = {
+                                if (linkInput.isNotBlank()) {
+                                    onAddLink(linkInput.trim())
+                                }
+                            },
+                            enabled = linkInput.isNotBlank(),
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Apprendre", color = DarkBackground, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer", color = TextSecondary)
+            }
+        }
+    )
 }

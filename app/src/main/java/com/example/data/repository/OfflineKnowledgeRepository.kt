@@ -27,58 +27,117 @@ class OfflineKnowledgeRepository(
         "sujet", "savoir", "connais", "connaissances", "about", "what", "tell", "explain", "learn"
     )
 
-    /**
-     * Query downloaded offline knowledge and documents to provide rich context for voice discussions.
-     */
-    suspend fun queryContentForDiscussion(userPrompt: String): String? = withContext(Dispatchers.IO) {
-        val trimmed = userPrompt.trim()
-        if (trimmed.isBlank()) return@withContext null
+    data class NotebookLMSourceContext(
+        val matchingDocuments: List<DownloadedDocument>,
+        val formattedContext: String
+    )
 
-        val keywords = trimmed.lowercase()
-            .split(" ", "'", "-", "?", "!", ",", ".", ":", ";")
+    /**
+     * Builds full NotebookLM grounding context from user's accumulated sources.
+     * Ingests full text content so Code can answer ANY question about the sources.
+     */
+    suspend fun buildNotebookLMContext(userPrompt: String, preferredDocId: Long? = null): NotebookLMSourceContext? = withContext(Dispatchers.IO) {
+        val trimmed = userPrompt.trim()
+        val allDocs = database.documentDao().getAllDocumentsSync()
+        if (allDocs.isEmpty()) return@withContext null
+
+        val lower = trimmed.lowercase()
+
+        // Pure greetings with no intellectual intent
+        val pureGreetings = setOf("bonjour", "salut", "coucou", "hello", "hi", "ça va", "comment tu vas")
+        if (pureGreetings.contains(lower) && preferredDocId == null) return@withContext null
+
+        val isExplicitSourceInquiry = lower.contains("source") || lower.contains("document") ||
+                lower.contains("lien") || lower.contains("article") || lower.contains("vidéo") ||
+                lower.contains("youtube") || lower.contains("tiktok") || lower.contains("pdf") ||
+                lower.contains("fichier") || lower.contains("notes") || lower.contains("résume") ||
+                lower.contains("synthèse") || lower.contains("d'après") || lower.contains("selon") ||
+                lower.contains("qu'as-tu appris") || lower.contains("que sais-tu") || lower.contains("quiz") ||
+                lower.contains("teste-moi") || lower.contains("questionne-moi")
+
+        val keywords = lower
+            .split(" ", "'", "-", "?", "!", ",", ".", ":", ";", "\"", "(", ")")
             .map { it.trim() }
             .filter { it.length >= 3 && !stopWords.contains(it) }
 
-        // 1. Direct Topic match (highest relevance)
-        for (kw in keywords) {
-            val topicMatch = database.knowledgeDao().findMatchingByTopic(kw)
-            if (topicMatch != null) {
-                return@withContext "D'après notre cours téléchargé sur ${topicMatch.topic} : ${topicMatch.summary} ${topicMatch.detailedContent.take(220)}... Points clés : ${topicMatch.keyPoints}."
+        val scoredDocs = allDocs.map { doc ->
+            var score = 0
+            if (preferredDocId != null && doc.id == preferredDocId) {
+                score += 1000
             }
-        }
+            val docTitleLower = doc.title.lowercase()
+            val docKeywordsLower = doc.keywords.lowercase()
+            val docSummaryLower = doc.summary.lowercase()
+            val docContentLower = doc.fullTextContent.lowercase()
 
-        // 2. Direct Document Title match
-        for (kw in keywords) {
-            val docTitleMatch = database.documentDao().findMatchingByTitle(kw)
-            if (docTitleMatch != null) {
-                return@withContext "D'après le document \"${docTitleMatch.title}\" (${docTitleMatch.topicCategory}) stocké sur ton téléphone : ${docTitleMatch.summary} ${docTitleMatch.fullTextContent.take(200)}..."
+            for (kw in keywords) {
+                if (docTitleLower.contains(kw)) score += 15
+                if (docKeywordsLower.contains(kw)) score += 8
+                if (docSummaryLower.contains(kw)) score += 6
+                if (docContentLower.contains(kw)) score += 3
             }
+
+            Pair(doc, score)
         }
 
-        // 3. Broader Knowledge match
-        for (kw in keywords) {
-            val kwMatch = database.knowledgeDao().findMatchingKnowledge(kw)
-            if (kwMatch != null) {
-                return@withContext "D'après nos connaissances enregistrées sur ${kwMatch.topic} : ${kwMatch.summary} ${kwMatch.detailedContent.take(200)}..."
+        val topMatches = scoredDocs.filter { it.second > 0 }.sortedByDescending { it.second }.map { it.first }
+
+        val selectedDocs = when {
+            preferredDocId != null -> {
+                val pref = allDocs.find { it.id == preferredDocId }
+                if (pref != null) listOf(pref) + topMatches.filter { it.id != preferredDocId }.take(2)
+                else topMatches.take(3)
             }
+            topMatches.isNotEmpty() -> topMatches.take(3)
+            isExplicitSourceInquiry -> allDocs.take(4)
+            allDocs.size <= 3 && keywords.isNotEmpty() -> allDocs
+            else -> emptyList()
         }
 
-        // 4. Broader Document match
-        for (kw in keywords) {
-            val docMatch = database.documentDao().searchDocuments(kw)
-            if (docMatch.isNotEmpty()) {
-                val doc = docMatch.first()
-                return@withContext "Selon notre document \"${doc.title}\" en mémoire locale : ${doc.summary} ${doc.fullTextContent.take(200)}..."
+        if (selectedDocs.isEmpty()) return@withContext null
+
+        val formatted = buildString {
+            appendLine("=== BASE DE CONNAISSANCES DE L'UTILISATEUR (STYLE NOTEBOOKLM) ===")
+            appendLine("Code possède en mémoire les sources suivantes accumulées au jour le jour par l'utilisateur.")
+            appendLine("Tu as une maîtrise TOTALE et ABSOLUE de leur contenu pour répondre à TOUTES les questions :")
+            for ((idx, doc) in selectedDocs.withIndex()) {
+                appendLine("\n--- SOURCE N°${idx + 1} : « ${doc.title} » ---")
+                appendLine("Type : ${doc.topicCategory} | Origine : ${doc.authorOrSource}${if (!doc.sourceUrl.isNullOrBlank()) " (${doc.sourceUrl})" else ""}")
+                appendLine("Résumé clé : ${doc.summary}")
+                appendLine("Points essentiels : ${doc.keywords}")
+                appendLine("CONTENU INTÉGRAL DE LA SOURCE :")
+                appendLine(doc.fullTextContent.take(30000))
             }
+            appendLine("\n=== DIRECTIVES NOTEBOOKLM POUR TA RÉPONSE ===")
+            appendLine("1. Réponds avec une précision remarquable à la question de ton ami en t'appuyant sur les faits, chiffres, explications et arguments de la source.")
+            appendLine("2. Tu peux citer la source (« Dans ton document... », « Selon la vidéo... », « D'après l'article... ») et répondre à n'importe quelle question (résumé, détail, explication, quiz).")
+            appendLine("3. Reste toujours complice, vivant, chaleureux et oral (ne lis pas froidement, discute avec intelligence comme deux vrais amis).")
         }
 
-        // 5. Fallback full prompt check if no keywords matched
-        val directKnowledge = database.knowledgeDao().findMatchingKnowledge(trimmed)
-        if (directKnowledge != null) {
-            return@withContext "D'après notre cours sur ${directKnowledge.topic} : ${directKnowledge.summary} Points clés : ${directKnowledge.keyPoints}."
-        }
+        NotebookLMSourceContext(selectedDocs, formatted)
+    }
 
-        null
+    suspend fun getTotalWordsAccumulated(): Int = withContext(Dispatchers.IO) {
+        val allDocs = database.documentDao().getAllDocumentsSync()
+        allDocs.sumOf { doc ->
+            doc.fullTextContent.split("\\s+".toRegex()).size
+        }
+    }
+
+    /**
+     * Finds a matching user-downloaded offline document when the user wants to discuss it.
+     */
+    suspend fun findMatchingDocumentForDiscussion(userPrompt: String): DownloadedDocument? = withContext(Dispatchers.IO) {
+        val nbContext = buildNotebookLMContext(userPrompt)
+        nbContext?.matchingDocuments?.firstOrNull()
+    }
+
+    /**
+     * Query user-downloaded offline sources and documents when specifically relevant to the discussion.
+     */
+    suspend fun queryContentForDiscussion(userPrompt: String): String? = withContext(Dispatchers.IO) {
+        val nbContext = buildNotebookLMContext(userPrompt)
+        nbContext?.formattedContext
     }
 
     suspend fun saveDownloadedKnowledge(knowledge: DownloadedKnowledge): Long = withContext(Dispatchers.IO) {
@@ -126,10 +185,13 @@ class OfflineKnowledgeRepository(
     }
 
     suspend fun saveIngestedSource(source: com.example.data.remote.IngestedSourceResult): Long = withContext(Dispatchers.IO) {
-        val categoryName = when (source.type) {
+        val categoryName = when (source.type.lowercase()) {
             "youtube" -> "YouTube 🎥"
             "tiktok" -> "TikTok 📱"
             "web" -> "Site Web 🌐"
+            "image" -> "Image 🖼️"
+            "folder" -> "Dossier 📁"
+            "pdf" -> "PDF 📑"
             else -> "Document 📄"
         }
 

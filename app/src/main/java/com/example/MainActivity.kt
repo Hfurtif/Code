@@ -80,7 +80,7 @@ sealed class NavTab(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    object Conversation : NavTab("conversation", "Conversation", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
+    object Conversation : NavTab("conversation", "Discussion", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
     object Sources : NavTab("sources", "Sources", Icons.Filled.Folder, Icons.Outlined.Folder)
     object Settings : NavTab("settings", "Réglages", Icons.Filled.Settings, Icons.Outlined.Settings)
 }

@@ -19,6 +19,7 @@ import com.example.voice.TtsManager
 import com.example.voice.TtsVoiceInfo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -75,6 +76,10 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
 
+    private var recordingTimerJob: kotlinx.coroutines.Job? = null
+    private val _recordingDurationSeconds = MutableStateFlow(0)
+    val recordingDurationSeconds: StateFlow<Int> = _recordingDurationSeconds.asStateFlow()
+
     private val _isListening = MutableStateFlow(false)
     val isListening: StateFlow<Boolean> = _isListening.asStateFlow()
 
@@ -128,6 +133,13 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     val allDocuments: StateFlow<List<com.example.data.model.DownloadedDocument>> = brain.repository.allDocumentsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val _activeSourceForDiscussion = MutableStateFlow<com.example.data.model.DownloadedDocument?>(null)
+    val activeSourceForDiscussion: StateFlow<com.example.data.model.DownloadedDocument?> = _activeSourceForDiscussion.asStateFlow()
+
+    val totalAssimilatedWords: StateFlow<Int> = allDocuments.map { docs ->
+        docs.sumOf { doc -> doc.fullTextContent.split("\\s+".toRegex()).size }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
     init {
         // Initial online check
         _isOnline.value = brain.isOnline()
@@ -165,10 +177,24 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 _isListening.value = listening
                 if (listening) {
                     _orbState.value = OrbState.LISTENING
-                    _statusText.value = "Je t'écoute…"
-                } else if (!_isSpeaking.value) {
-                    _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
-                    _statusText.value = "Prêt à t'écouter"
+                    _statusText.value = "En écoute continue… Parle, puis réappuie quand tu as fini !"
+                    if (recordingTimerJob == null) {
+                        _recordingDurationSeconds.value = 0
+                        recordingTimerJob = viewModelScope.launch {
+                            while (isActive) {
+                                delay(1000L)
+                                _recordingDurationSeconds.value += 1
+                            }
+                        }
+                    }
+                } else {
+                    recordingTimerJob?.cancel()
+                    recordingTimerJob = null
+                    _recordingDurationSeconds.value = 0
+                    if (!_isSpeaking.value) {
+                        _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
+                        _statusText.value = "Prêt à discuter"
+                    }
                 }
             },
             onErrorOccurred = { error ->
@@ -318,6 +344,15 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateGeminiApiKey(apiKey: String) {
+        viewModelScope.launch {
+            val clean = apiKey.trim()
+            val updated = userProfile.value.copy(geminiApiKey = clean)
+            database.userDao().insertOrUpdate(updated)
+            _infoBannerMessage.value = if (clean.isNotBlank()) "Clé Gemini configurée ! IA Cloud active." else "Clé Gemini réinitialisée (Mode local actif)"
+        }
+    }
+
     fun expandStorage(amountGb: Double = 20.0) {
         viewModelScope.launch {
             val newLimit = userProfile.value.maxStorageLimitGb + amountGb
@@ -333,12 +368,12 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         if (cleanUrl.isBlank()) return
         viewModelScope.launch {
             _isIngestingSource.value = true
-            _infoBannerMessage.value = "Téléchargement et analyse de la source..."
+            _infoBannerMessage.value = "Téléchargement intégral style NotebookLM..."
             try {
                 val result = com.example.data.remote.SourceIngestionService.ingestFromUrl(cleanUrl)
                 brain.repository.saveIngestedSource(result)
-                _infoBannerMessage.value = "Source « ${result.title} » mémorisée avec succès !"
-                val spoken = "J'ai bien téléchargé et mémorisé ta source ${result.title}. Elle est disponible hors ligne !"
+                _infoBannerMessage.value = "Source « ${result.title} » (${result.wordCount} mots) assimilée style NotebookLM !"
+                val spoken = "J'ai téléchargé et mémorisé tout le contenu de ta source ${result.title}. Tu peux me poser n'importe quelle question dessus !"
                 speak(spoken)
             } catch (e: Exception) {
                 android.util.Log.e("CodeViewModel", "Error ingesting source", e)
@@ -357,12 +392,75 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val result = com.example.data.remote.SourceIngestionService.ingestFromDocumentText(title, cleanContent)
                 brain.repository.saveIngestedSource(result)
-                _infoBannerMessage.value = "Document « ${result.title} » mémorisé hors ligne !"
-                val spoken = "J'ai bien enregistré et appris ton document ${result.title}. Nous pouvons en discuter !"
+                _infoBannerMessage.value = "Document « ${result.title} » (${result.wordCount} mots) mémorisé style NotebookLM !"
+                val spoken = "J'ai mémorisé l'intégralité de ton document ${result.title}. Tu peux me poser toutes tes questions dessus !"
                 speak(spoken)
             } catch (e: Exception) {
                 android.util.Log.e("CodeViewModel", "Error saving document", e)
                 _infoBannerMessage.value = "Erreur lors de l'enregistrement du document."
+            } finally {
+                _isIngestingSource.value = false
+            }
+        }
+    }
+
+    fun ingestDeviceFiles(uris: List<android.net.Uri>) {
+        if (uris.isEmpty()) return
+        val context = getApplication<Application>()
+        viewModelScope.launch {
+            _isIngestingSource.value = true
+            _infoBannerMessage.value = "Importation de ${uris.size} fichier(s) depuis le téléphone..."
+            try {
+                val results = com.example.data.remote.LocalDeviceIngestionService.ingestMultipleFileUris(context, uris)
+                results.forEach { result ->
+                    brain.repository.saveIngestedSource(result)
+                }
+                val msg = if (results.size == 1) {
+                    "« ${results.first().title} » mémorisé dans tes Sources !"
+                } else {
+                    "${results.size} documents/images mémorisés dans tes Sources !"
+                }
+                _infoBannerMessage.value = msg
+                val spoken = if (results.size == 1) {
+                    "J'ai bien enregistré ${results.first().title} dans mes sources hors ligne !"
+                } else {
+                    "J'ai bien importé tes ${results.size} fichiers. Nous pouvons en discuter !"
+                }
+                speak(spoken)
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error ingesting device files", e)
+                _infoBannerMessage.value = "Erreur lors de l'importation des fichiers du téléphone."
+            } finally {
+                _isIngestingSource.value = false
+            }
+        }
+    }
+
+    fun ingestDeviceFolder(treeUri: android.net.Uri) {
+        val context = getApplication<Application>()
+        viewModelScope.launch {
+            _isIngestingSource.value = true
+            _infoBannerMessage.value = "Analyse et importation du dossier en cours..."
+            try {
+                val results = com.example.data.remote.LocalDeviceIngestionService.ingestFolderTree(context, treeUri)
+                results.forEach { result ->
+                    brain.repository.saveIngestedSource(result)
+                }
+                val msg = if (results.isNotEmpty()) {
+                    "Dossier importé : ${results.size} fichier(s) mémorisé(s) dans tes Sources !"
+                } else {
+                    "Aucun fichier pris en charge trouvé dans ce dossier."
+                }
+                _infoBannerMessage.value = msg
+                val spoken = if (results.isNotEmpty()) {
+                    "J'ai bien scanné et appris les ${results.size} fichiers de ton dossier !"
+                } else {
+                    "Je n'ai pas trouvé de documents ou d'images à mémoriser dans ce dossier."
+                }
+                speak(spoken)
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error ingesting folder", e)
+                _infoBannerMessage.value = "Impossible de lire ce dossier du téléphone."
             } finally {
                 _isIngestingSource.value = false
             }
@@ -376,22 +474,28 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun startDiscussionOnSource(doc: com.example.data.model.DownloadedDocument) {
-        val comp = userProfile.value.companionName.ifBlank { "Code" }
-        val prompt = "Discutons de ta source « ${doc.title} ». J'ai bien mémorisé les informations clés : ${doc.summary}. Que souhaites-tu qu'on approfondisse ou analyse ensemble ?"
-        _liveCodeReply.value = prompt
-        speak(prompt)
-        viewModelScope.launch {
-            database.conversationDao().insertMessage(
-                ConversationMessage(
-                    role = "code",
-                    text = prompt,
-                    mode = _selectedMode.value.name,
-                    isWebSearch = false,
-                    webSearchTopic = doc.title
-                )
-            )
+    fun setActiveSource(doc: com.example.data.model.DownloadedDocument?) {
+        _activeSourceForDiscussion.value = doc
+    }
+
+    fun clearActiveSource() {
+        _activeSourceForDiscussion.value = null
+    }
+
+    fun startDiscussionOnSource(doc: com.example.data.model.DownloadedDocument, questionType: String? = null) {
+        _activeSourceForDiscussion.value = doc
+        val query = when (questionType) {
+            "summary" -> "Résume-moi l'essentiel de ma source : « ${doc.title} »"
+            "quiz" -> "Fais-moi un quiz interactif sur ma source : « ${doc.title} »"
+            "key_points" -> "Quels sont les points clés essentiels de : « ${doc.title} » ?"
+            "explain" -> "Explique-moi les concepts majeurs décrits dans : « ${doc.title} »"
+            else -> "Parlons de ma source : « ${doc.title} »"
         }
+        processInput(query)
+    }
+
+    fun queryAllSources() {
+        processInput("Fais-moi le point sur toutes mes sources et ce que tu as appris")
     }
 
     fun showWebSearchDialog() {
@@ -416,21 +520,38 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         }
         _isOnline.value = brain.isOnline()
         val lang = if (_selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else userProfile.value.preferredLanguageCode
-        _statusText.value = "Je t'écoute…"
+        _liveUserTranscript.value = ""
+        _statusText.value = "En écoute continue… Parle à ton rythme, réappuie quand tu as fini !"
         _orbState.value = OrbState.LISTENING
         speechManager?.startListening(lang)
     }
 
-    fun stopListening() {
-        speechManager?.stopListening()
+    fun stopListeningAndSend() {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = null
+        _statusText.value = "Envoi à ${userProfile.value.companionName.ifBlank { "Code" }}…"
+        _orbState.value = OrbState.THINKING
+        speechManager?.stopListeningAndCommit()
+    }
+
+    fun cancelRecording() {
+        recordingTimerJob?.cancel()
+        recordingTimerJob = null
+        _recordingDurationSeconds.value = 0
+        speechManager?.cancelListening()
         _isListening.value = false
+        _liveUserTranscript.value = ""
         _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
-        _statusText.value = "Prêt"
+        _statusText.value = "Enregistrement annulé"
+    }
+
+    fun stopListening() {
+        stopListeningAndSend()
     }
 
     fun toggleListening() {
         if (_isListening.value) {
-            stopListening()
+            stopListeningAndSend()
         } else {
             startListening()
         }
@@ -472,7 +593,8 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 userText = text,
                 currentMode = _selectedMode.value,
                 userProfile = userProfile.value,
-                recentMessages = allMessages.value
+                recentMessages = allMessages.value,
+                preferredDocId = _activeSourceForDiscussion.value?.id
             )
 
             _isWebSearching.value = false

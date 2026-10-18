@@ -30,7 +30,7 @@ import kotlinx.coroutines.launch
         DownloadedKnowledge::class,
         DownloadedDocument::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -276,76 +276,12 @@ abstract class AppDatabase : RoomDatabase() {
                 )
             )
 
-            // Seed initial downloaded knowledge topics for offline learning and discussion
-            database.knowledgeDao().insertKnowledge(
-                DownloadedKnowledge(
-                    topic = "Les Trous Noirs & l'Astrophysique",
-                    category = "Sciences & Univers",
-                    summary = "Comprendre les trous noirs, l'horizon des événements, et la relativité générale.",
-                    detailedContent = "Un trou noir est une région de l'espace-temps dont le champ gravitationnel est si intense que rien, pas même la lumière, ne peut s'en échapper. Au cœur se trouve une singularité gravitationnelle. La frontière est appelée l'horizon des événements. Les trous noirs stellaires naissent de l'effondrement d'étoiles massives, tandis que des trous noirs supermassifs trônent au centre des galaxies, comme Sagittarius A* dans la Voie Lactée.",
-                    keyPoints = "Horizon des événements; Singularité; Relativité générale d'Einstein; Déformation du temps; Trous noirs supermassifs",
-                    sampleQuestions = "Comment se forme un trou noir ?; Qu'est-ce que l'horizon des événements ?; Que devient le temps à proximité ?",
-                    sizeMb = 2.1,
-                    isAvailableOffline = true
-                )
-            )
-            database.knowledgeDao().insertKnowledge(
-                DownloadedKnowledge(
-                    topic = "L'Empire Romain : De César à la Chute",
-                    category = "Histoire & Civilisations",
-                    summary = "L'ascension de Rome, l'organisation de l'Empire et les causes de sa chute.",
-                    detailedContent = "Fondée selon la légende en 753 avant J.-C., Rome est passée de la royauté à la République, puis à l'Empire sous Auguste en 27 avant J.-C. Les Romains ont unifié le pourtour méditerranéen grâce à leurs légions, leur droit et leurs infrastructures exceptionnelles (aqueducs, voies romaines). La Pax Romana a duré deux siècles, avant les divisions en Empire d'Occident et d'Orient et la chute de Rome en 476.",
-                    keyPoints = "République vs Empire; Jules César et Auguste; Pax Romana; Voies romaines et droit civil; Chute en 476",
-                    sampleQuestions = "Qui était le premier empereur romain ?; Pourquoi Rome était-elle si puissante militairement ?; Quelles sont les causes de la fin de l'Empire ?",
-                    sizeMb = 2.4,
-                    isAvailableOffline = true
-                )
-            )
-            database.knowledgeDao().insertKnowledge(
-                DownloadedKnowledge(
-                    topic = "Les Biais Cognitifs & la Prise de Décision",
-                    category = "Psychologie & Esprit",
-                    summary = "Découvrir les pièges de notre cerveau et comment penser plus rationnellement.",
-                    detailedContent = "Notre cerveau utilise des raccourcis mentaux appelés heuristiques. Ces raccourcis créent des biais cognitifs systématiques : le biais de confirmation (chercher ce qui confirme nos croyances), l'effet d'ancrage (se focaliser sur la première information reçue), et l'aversion à la perte (la douleur de perdre est deux fois plus forte que le plaisir de gagner). Reconnaître ces biais permet de prendre de bien meilleures décisions au travail et dans la vie.",
-                    keyPoints = "Biais de confirmation; Effet de halo; Ancrage mental; Aversion à la perte; Pensée Système 1 et Système 2",
-                    sampleQuestions = "Qu'est-ce que le biais de confirmation ?; Pourquoi a-t-on peur de perdre ?; Comment déjouer les pièges de son cerveau ?",
-                    sizeMb = 1.9,
-                    isAvailableOffline = true
-                )
-            )
-
-            // Seed initial reference documents
-            database.documentDao().insertDocument(
-                DownloadedDocument(
-                    title = "Manuel Pratique d'Anglais Professionnel & Fluency",
-                    authorOrSource = "Synthèse Pédagogique Code",
-                    topicCategory = "Langues & Carrière",
-                    summary = "Expressions clés, tournures professionnelles pour les réunions et négociations en anglais.",
-                    fullTextContent = "Pour s'exprimer avec fluidité en anglais professionnel, privilégiez les tournures diplomatiques. Par exemple, au lieu de 'I disagree', utilisez 'I see your point, however I would suggest...'. Pour présenter des résultats, structurez vos interventions en trois temps : contexte, défi résolu, métrique d'impact. Maîtrisez les modaux de politesse : could, would et might.",
-                    keywords = "Anglais; Réunions; Négociation; Modaux; Fluency; Vocabulaire",
-                    sizeMb = 3.4,
-                    isAvailableOffline = true
-                )
-            )
-            database.documentDao().insertDocument(
-                DownloadedDocument(
-                    title = "Dossier : Origine et Évolution de l'Univers",
-                    authorOrSource = "Encyclopédie Scientifique Code",
-                    topicCategory = "Sciences & Astronomie",
-                    summary = "Du Big Bang à l'expansion accélérée et à la formation des premières galaxies.",
-                    fullTextContent = "L'Univers observable s'est formé il y a environ 13,8 milliards d'années à partir d'un état extrêmement dense et chaud. L'inflation cosmique a suivi, puis le rayonnement fossile s'est libéré 380 000 ans plus tard. Aujourd'hui, l'expansion de l'univers s'accélère sous l'effet de l'énergie noire, qui représente environ 68% de la densité d'énergie totale.",
-                    keywords = "Univers; Big Bang; Énergie noire; Matière noire; Galaxies; Astrophysique",
-                    sizeMb = 4.1,
-                    isAvailableOffline = true
-                )
-            )
-
-            // Seed initial greeting message
+            // Seed initial greeting message (Warm, friendly companion like Jarvis)
             database.conversationDao().insertMessage(
                 ConversationMessage(
                     role = "code",
-                    text = "Bonjour ! Je suis Code, ton professeur personnel. Je suis prêt à t'accompagner. De quoi aimerais-tu parler aujourd'hui ?",
-                    mode = "ENGLISH"
+                    text = "Salut mon ami ! C'est Code, ton compagnon sur ton portable. Comment tu vas aujourd'hui ? Raconte-moi, comment va la famille et comment se passe ta journée ? Je suis là pour discuter de tout avec toi !",
+                    mode = "FRIEND"
                 )
             )
         }

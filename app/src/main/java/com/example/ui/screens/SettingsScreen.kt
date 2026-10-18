@@ -17,6 +17,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
 import androidx.compose.material.icons.filled.Info
@@ -30,6 +31,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
@@ -77,6 +80,7 @@ fun SettingsScreen(
 
     var rateSlider by remember(profile.speechRate) { mutableFloatStateOf(profile.speechRate) }
     var pitchSlider by remember(profile.speechPitch) { mutableFloatStateOf(profile.speechPitch) }
+    var customApiKeyInput by remember(profile.geminiApiKey) { mutableStateOf(profile.geminiApiKey) }
 
     Column(
         modifier = modifier
@@ -320,7 +324,7 @@ fun SettingsScreen(
                         // Sample Voice Audio Preview Button
                         Button(
                             onClick = {
-                                viewModel.speak("Bonjour ! Je m'appelle ${profile.companionName.ifBlank { "Code" }}, ton ami omniscient dans l'application Code. Discutons de ce qui te passionne !")
+                                viewModel.speak("Bonjour ! Je m'appelle ${profile.companionName.ifBlank { "Code" }}, ton compagnon personnel dans l'application Code. Discutons de ce qui te passionne ou de tes sources !")
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(12.dp),
@@ -461,6 +465,78 @@ fun SettingsScreen(
                                         modifier = Modifier.padding(vertical = 8.dp),
                                         textAlign = androidx.compose.ui.text.style.TextAlign.Center
                                     )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // AI Brain & Jarvis Engine Card
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = NeonCyan.copy(alpha = 0.45f)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Intelligence Artificielle & Jarvis",
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = "Code intègre le moteur de conversation Jarvis : il discute avec toi comme un véritable ami intime (prend des nouvelles de toi et de ta famille, taquine, rigole, partage ses avis et débat de tes sources sans réciter de cours).",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            text = "Clé API Gemini (Optionnelle - pour IA Cloud Gemini 2.5 Flash) :",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = customApiKeyInput,
+                            onValueChange = { customApiKeyInput = it },
+                            placeholder = { Text("Colle ta clé API Gemini...", fontSize = 12.sp, color = TextMuted) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("gemini_api_key_input"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = DarkCardBorder,
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedContainerColor = DarkSurface,
+                                unfocusedContainerColor = DarkSurface
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End
+                        ) {
+                            if (customApiKeyInput != profile.geminiApiKey) {
+                                Button(
+                                    onClick = { viewModel.updateGeminiApiKey(customApiKeyInput) },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.testTag("save_api_key_button")
+                                ) {
+                                    Text("Enregistrer la clé", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                                 }
                             }
                         }

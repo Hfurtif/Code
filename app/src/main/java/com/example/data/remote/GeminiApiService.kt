@@ -55,8 +55,20 @@ data class ErrorItem(
 )
 
 interface GeminiApi {
-    @POST("v1beta/models/gemini-3.5-flash:generateContent")
+    @POST("v1beta/models/gemini-2.5-flash:generateContent")
     suspend fun generateContent(
+        @Query("key") apiKey: String,
+        @Body request: GeminiRequest
+    ): GeminiResponse
+
+    @POST("v1beta/models/gemini-1.5-flash:generateContent")
+    suspend fun generateContentLite(
+        @Query("key") apiKey: String,
+        @Body request: GeminiRequest
+    ): GeminiResponse
+
+    @POST("v1beta/models/gemini-2.0-flash:generateContent")
+    suspend fun generateContentV2(
         @Query("key") apiKey: String,
         @Body request: GeminiRequest
     ): GeminiResponse
@@ -70,9 +82,9 @@ object GeminiClient {
         .build()
 
     private val okHttpClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(60, TimeUnit.SECONDS)
+        .connectTimeout(30, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .writeTimeout(30, TimeUnit.SECONDS)
         .addInterceptor(HttpLoggingInterceptor().apply {
             level = HttpLoggingInterceptor.Level.BASIC
         })
@@ -86,12 +98,40 @@ object GeminiClient {
 
     val api: GeminiApi = retrofit.create(GeminiApi::class.java)
 
-    fun hasValidApiKey(): Boolean {
+    fun hasValidApiKey(customKey: String = ""): Boolean {
+        if (customKey.isNotBlank()) return true
         val key = BuildConfig.GEMINI_API_KEY
         return !key.isNullOrBlank() && key != "MY_GEMINI_API_KEY"
     }
 
-    fun getApiKey(): String {
-        return BuildConfig.GEMINI_API_KEY ?: ""
+    fun getApiKey(customKey: String = ""): String {
+        if (customKey.isNotBlank()) return customKey
+        val key = BuildConfig.GEMINI_API_KEY ?: ""
+        return if (key == "MY_GEMINI_API_KEY") "" else key
+    }
+
+    suspend fun callWithFallback(request: GeminiRequest, customKey: String = ""): String {
+        val key = getApiKey(customKey)
+        if (key.isBlank()) return ""
+
+        return try {
+            val resp = api.generateContent(key, request)
+            resp.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim() ?: ""
+        } catch (e: Exception) {
+            android.util.Log.w("GeminiClient", "gemini-2.5-flash failed: ${e.message}, trying gemini-1.5-flash...")
+            try {
+                val respLite = api.generateContentLite(key, request)
+                respLite.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim() ?: ""
+            } catch (e2: Exception) {
+                android.util.Log.w("GeminiClient", "gemini-1.5-flash failed: ${e2.message}, trying gemini-2.0-flash...")
+                try {
+                    val respV2 = api.generateContentV2(key, request)
+                    respV2.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text?.trim() ?: ""
+                } catch (e3: Exception) {
+                    android.util.Log.e("GeminiClient", "All Gemini models failed: ${e3.message}")
+                    ""
+                }
+            }
+        }
     }
 }

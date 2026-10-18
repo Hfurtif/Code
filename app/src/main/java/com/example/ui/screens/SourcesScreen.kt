@@ -20,6 +20,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
@@ -30,12 +33,14 @@ import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -92,9 +97,34 @@ fun SourcesScreen(
     onNavigateToConversation: () -> Unit = {}
 ) {
     val documents by viewModel.allDocuments.collectAsState()
+    val totalWords by viewModel.totalAssimilatedWords.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
     val isIngesting by viewModel.isIngestingSource.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
+
+    val documentPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenMultipleDocuments()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.ingestDeviceFiles(uris)
+        }
+    }
+
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia()
+    ) { uris ->
+        if (uris.isNotEmpty()) {
+            viewModel.ingestDeviceFiles(uris)
+        }
+    }
+
+    val folderPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { treeUri ->
+        if (treeUri != null) {
+            viewModel.ingestDeviceFolder(treeUri)
+        }
+    }
 
     var addModeTab by remember { mutableIntStateOf(0) } // 0: Lien Web, 1: Document/Texte
     var inputUrl by remember { mutableStateOf("") }
@@ -120,7 +150,9 @@ fun SourcesScreen(
             "YOUTUBE" -> doc.sourceType.equals("youtube", ignoreCase = true)
             "TIKTOK" -> doc.sourceType.equals("tiktok", ignoreCase = true)
             "WEB" -> doc.sourceType.equals("web", ignoreCase = true)
-            "DOCUMENT" -> doc.sourceType.equals("document", ignoreCase = true) || doc.sourceType.isBlank()
+            "IMAGE" -> doc.sourceType.equals("image", ignoreCase = true)
+            "FOLDER" -> doc.sourceType.equals("folder", ignoreCase = true) || doc.authorOrSource.contains("Dossier")
+            "DOCUMENT" -> doc.sourceType.equals("document", ignoreCase = true) || doc.sourceType.equals("pdf", ignoreCase = true) || doc.sourceType.isBlank()
             else -> true
         }
 
@@ -141,13 +173,13 @@ fun SourcesScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "Sources & Mémoire",
-                    fontSize = 24.sp,
+                    text = "Sources & Connaissances (Style NotebookLM)",
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
                 )
                 Text(
-                    text = "Donne des liens ou des documents à Code pour qu'il apprenne et en discute hors ligne !",
+                    text = "Télécharge l'intégralité de tes liens et documents. Code perfectionne ses connaissances jour après jour et répond à toutes tes questions dessus !",
                     fontSize = 12.sp,
                     color = TextSecondary,
                     lineHeight = 16.sp
@@ -174,7 +206,7 @@ fun SourcesScreen(
             verticalArrangement = Arrangement.spacedBy(14.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            // Memory & Quota Card
+            // Knowledge Perfection & Multi-Source Inquiry Card (NotebookLM Hub)
             item {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -188,45 +220,122 @@ fun SourcesScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Storage, contentDescription = null, tint = NeonCyan)
+                                Icon(Icons.Default.Storage, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text(
-                                    text = "Espace disponible pour tes sources",
+                                    text = "Cerveau & Perfectionnement de Code",
                                     color = TextPrimary,
-                                    fontSize = 13.sp,
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Text(
-                                text = "%.1f Mo / %.0f Go".format(usedMb, maxLimitGb),
-                                color = NeonCyan,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.Black
-                            )
+                            Surface(
+                                color = NeonViolet.copy(alpha = 0.25f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "Style NotebookLM",
+                                    color = NeonViolet,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
                         }
 
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Stats Grid (3 boxes: Sources, Mots mémorisés, Stockage)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Surface(
+                                color = DarkSurface,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "${documents.size}", color = NeonCyan, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                    Text(text = "Sources actives", color = TextSecondary, fontSize = 10.sp)
+                                }
+                            }
+                            Surface(
+                                color = DarkSurface,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "$totalWords", color = NeonViolet, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                    Text(text = "Mots mémorisés", color = TextSecondary, fontSize = 10.sp)
+                                }
+                            }
+                            Surface(
+                                color = DarkSurface,
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier.weight(1f),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
+                            ) {
+                                Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text(text = "%.1f Mo".format(usedMb), color = SuccessGreen, fontSize = 18.sp, fontWeight = FontWeight.Black)
+                                    Text(text = "Stocké sur mobile", color = TextSecondary, fontSize = 10.sp)
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
                         val progress = (usedMb / totalAppLimitMb).toFloat().coerceIn(0f, 1f)
                         LinearProgressIndicator(
                             progress = { progress },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(6.dp)
+                                .height(5.dp)
                                 .clip(RoundedCornerShape(3.dp)),
                             color = NeonCyan,
                             trackColor = DarkSurface
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Toutes les sources ajoutées sont stockées sur ton portable et utilisables hors ligne.",
+                            text = "Jour après jour, chaque lien et document ajouté approfondit et perfectionne le savoir de Code. Tu peux l'interroger sur n'importe quel sujet !",
                             color = TextSecondary,
-                            fontSize = 11.sp
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
                         )
+
+                        if (documents.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.queryAllSources()
+                                    onNavigateToConversation()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(40.dp)
+                            ) {
+                                Icon(Icons.Default.ChatBubble, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Interroger l'ensemble de mes sources",
+                                    color = Color.Black,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
                     }
                 }
             }
 
             // Ingestion Card: Add URL or Document
+            // Ingestion Card: Import directly from Phone (Documents, Images, Folders) or Links
             item {
                 GlassCard(
                     modifier = Modifier.fillMaxWidth(),
@@ -241,14 +350,191 @@ fun SourcesScreen(
                             Icon(Icons.Default.Add, contentDescription = null, tint = NeonViolet)
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "Ajouter une nouvelle Source",
+                                text = "Ajouter des Sources à Code",
                                 color = TextPrimary,
-                                fontSize = 15.sp,
+                                fontSize = 16.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
+                        Text(
+                            text = "Importe des documents, images ou dossiers directement depuis ton portable :",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            modifier = Modifier.padding(top = 2.dp, bottom = 12.dp)
+                        )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        // Direct Device Pickers (3 Action Cards)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // 1. Documents (PDF, TXT, Word, etc.)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        documentPickerLauncher.launch(
+                                            arrayOf(
+                                                "application/pdf",
+                                                "text/*",
+                                                "application/msword",
+                                                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                                                "application/json",
+                                                "*/*"
+                                            )
+                                        )
+                                    }
+                                    .testTag("import_documents_device_button"),
+                                color = DarkSurface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Description,
+                                        contentDescription = "Importer Documents",
+                                        tint = NeonCyan,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Documents",
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "PDF, TXT, Word…",
+                                        color = TextMuted,
+                                        fontSize = 9.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            // 2. Images (Gallery Photo Picker)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        photoPickerLauncher.launch(
+                                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                                        )
+                                    }
+                                    .testTag("import_images_device_button"),
+                                color = DarkSurface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Image,
+                                        contentDescription = "Importer Images",
+                                        tint = NeonViolet,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Images",
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Photos & captures",
+                                        color = TextMuted,
+                                        fontSize = 9.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+
+                            // 3. Whole Folder (OpenDocumentTree)
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable {
+                                        folderPickerLauncher.launch(null)
+                                    }
+                                    .testTag("import_folder_device_button"),
+                                color = DarkSurface,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.6f)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(vertical = 12.dp, horizontal = 6.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Folder,
+                                        contentDescription = "Importer Dossier",
+                                        tint = ElectricBlue,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "Dossier",
+                                        color = TextPrimary,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        text = "Tout un dossier",
+                                        color = TextMuted,
+                                        fontSize = 9.sp,
+                                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+
+                        // Ingestion Loading Indicator
+                        if (isIngesting) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Surface(
+                                color = NeonCyan.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        color = NeonCyan,
+                                        strokeWidth = 2.dp
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Text(
+                                        text = "Téléchargement intégral et assimilation style NotebookLM en cours…",
+                                        color = NeonCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(14.dp))
+
+                        Text(
+                            text = "Ou ajouter un lien web / texte personnalisé :",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         // Ingestion Mode Switcher (Lien Web vs Document texte)
                         Row(
@@ -257,7 +543,7 @@ fun SourcesScreen(
                         ) {
                             listOf(
                                 0 to "🔗 Lien (YouTube, TikTok, Web)",
-                                1 to "📄 Document / Texte"
+                                1 to "✍️ Saisie texte direct"
                             ).forEach { (idx, title) ->
                                 val isSelected = addModeTab == idx
                                 Surface(
@@ -271,7 +557,7 @@ fun SourcesScreen(
                                         .weight(1f)
                                         .clip(RoundedCornerShape(10.dp))
                                         .clickable { addModeTab = idx }
-                                        .padding(vertical = 8.dp),
+                                        .padding(vertical = 7.dp),
                                     content = {
                                         Text(
                                             text = title,
@@ -286,16 +572,10 @@ fun SourcesScreen(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
                         if (addModeTab == 0) {
                             // Link Ingestion Tab (YouTube, TikTok, Web)
-                            Text(
-                                text = "Colle le lien d'une vidéo YouTube, d'un TikTok ou d'une page Web :",
-                                color = TextSecondary,
-                                fontSize = 11.sp
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
                             OutlinedTextField(
                                 value = inputUrl,
                                 onValueChange = { inputUrl = it },
@@ -345,32 +625,16 @@ fun SourcesScreen(
                                     .height(44.dp)
                                     .testTag("ingest_url_button")
                             ) {
-                                if (isIngesting) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        color = Color.Black,
-                                        strokeWidth = 2.dp
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Téléchargement et analyse…", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                } else {
-                                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Télécharger & Mémoriser la Source", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                                }
+                                Icon(Icons.Default.CloudDownload, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Télécharger & Mémoriser le Lien", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                             }
                         } else {
                             // Document / Text Ingestion Tab
-                            Text(
-                                text = "Titre du document :",
-                                color = TextSecondary,
-                                fontSize = 11.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = inputDocTitle,
                                 onValueChange = { inputDocTitle = it },
-                                placeholder = { Text("Ex: Mes notes de cours, Fiche de révision, Article…", color = TextMuted, fontSize = 12.sp) },
+                                placeholder = { Text("Titre (ex: Mes notes de révision…)", color = TextMuted, fontSize = 12.sp) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("source_doc_title_input"),
@@ -386,21 +650,15 @@ fun SourcesScreen(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
-                            Text(
-                                text = "Contenu ou texte intégral :",
-                                color = TextSecondary,
-                                fontSize = 11.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
                             OutlinedTextField(
                                 value = inputDocContent,
                                 onValueChange = { inputDocContent = it },
                                 placeholder = { Text("Colle ici le texte de ton document pour que Code l'apprenne…", color = TextMuted, fontSize = 12.sp) },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(130.dp)
+                                    .height(110.dp)
                                     .testTag("source_doc_content_input"),
                                 shape = RoundedCornerShape(10.dp),
                                 colors = OutlinedTextFieldDefaults.colors(
@@ -413,7 +671,7 @@ fun SourcesScreen(
                                 )
                             )
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
 
                             Button(
                                 onClick = {
@@ -480,10 +738,12 @@ fun SourcesScreen(
                     ) {
                         listOf(
                             "ALL" to "Toutes (${documents.size})",
-                            "YOUTUBE" to "YouTube 🎥",
-                            "TIKTOK" to "TikTok 📱",
+                            "DOCUMENT" to "Documents 📄",
+                            "IMAGE" to "Images 🖼️",
+                            "FOLDER" to "Dossiers 📁",
                             "WEB" to "Sites Web 🌐",
-                            "DOCUMENT" to "Documents 📄"
+                            "YOUTUBE" to "YouTube 🎥",
+                            "TIKTOK" to "TikTok 📱"
                         ).forEach { (catKey, catLabel) ->
                             val isSelected = selectedCategoryFilter == catKey
                             Surface(
@@ -550,6 +810,10 @@ fun SourcesScreen(
                         doc = doc,
                         onDiscuss = {
                             viewModel.startDiscussionOnSource(doc)
+                            onNavigateToConversation()
+                        },
+                        onQuickAsk = { qType ->
+                            viewModel.startDiscussionOnSource(doc, qType)
                             onNavigateToConversation()
                         },
                         onPreview = { docToPreview = doc },
@@ -649,18 +913,31 @@ fun SourcesScreen(
                 }
             },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val d = doc
-                        docToPreview = null
-                        viewModel.startDiscussionOnSource(d)
-                        onNavigateToConversation()
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
-                ) {
-                    Icon(Icons.Default.ChatBubble, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Discuter de cette source", color = Color.Black, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            val d = doc
+                            docToPreview = null
+                            viewModel.startDiscussionOnSource(d, "quiz")
+                            onNavigateToConversation()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonViolet)
+                    ) {
+                        Text("🎯 Quiz", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                    Button(
+                        onClick = {
+                            val d = doc
+                            docToPreview = null
+                            viewModel.startDiscussionOnSource(d)
+                            onNavigateToConversation()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Icon(Icons.Default.ChatBubble, contentDescription = null, tint = Color.Black, modifier = Modifier.size(15.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Discuter", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
                 }
             },
             dismissButton = {
@@ -709,12 +986,16 @@ fun SourcesScreen(
 private fun SourceItemCard(
     doc: DownloadedDocument,
     onDiscuss: () -> Unit,
+    onQuickAsk: (String) -> Unit = {},
     onPreview: () -> Unit,
     onDelete: () -> Unit
 ) {
     val dateStr = remember(doc.downloadDate) {
         val sdf = SimpleDateFormat("dd MMM yyyy", Locale.FRENCH)
         sdf.format(Date(doc.downloadDate))
+    }
+    val wordCount = remember(doc.fullTextContent) {
+        doc.fullTextContent.split("\\s+".toRegex()).size
     }
 
     val (badgeText, badgeColor, badgeIcon) = when (doc.sourceType.lowercase()) {
@@ -730,7 +1011,7 @@ private fun SourceItemCard(
         backgroundColor = DarkSurfaceVariant
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Top row: Type badge, Date, and Delete button
+            // Top row: Type badge, Date, Words, and Delete button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -763,9 +1044,9 @@ private fun SourceItemCard(
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = "$dateStr • %.1f Mo".format(doc.sizeMb),
+                        text = "$dateStr • $wordCount mots • %.1f Mo".format(doc.sizeMb),
                         color = TextMuted,
-                        fontSize = 11.sp
+                        fontSize = 10.sp
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     IconButton(
@@ -816,7 +1097,41 @@ private fun SourceItemCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Offline ready badge
+            // NotebookLM Quick Actions Row
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                listOf(
+                    "💡 Résumé" to "summary",
+                    "🎯 Quiz" to "quiz",
+                    "🔍 Points clés" to "key_points",
+                    "❓ Expliquer" to "explain"
+                ).forEach { (label, qType) ->
+                    Surface(
+                        color = DarkSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.4f)),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { onQuickAsk(qType) }
+                    ) {
+                        Text(
+                            text = label,
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Offline ready badge & Action Buttons
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,

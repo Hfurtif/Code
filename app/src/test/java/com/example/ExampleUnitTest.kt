@@ -68,4 +68,15 @@ class ExampleUnitTest {
         assertTrue(instruction.contains("Lina"))
         assertTrue(instruction.contains("figure féminine"))
     }
+
+    @Test
+    fun testNotebookLMSourceIngestion() {
+        val result = com.example.data.remote.SourceIngestionService.ingestFromDocumentText(
+            rawTitle = "Cours d'Astrophysique",
+            rawContent = "Les étoiles à neutrons sont des résidus d'étoiles massives qui ont explosé en supernova. Leur densité est phénoménale."
+        )
+        assertEquals("Cours d'Astrophysique", result.title)
+        assertTrue(result.fullContent.contains("supernova"))
+        assertTrue(result.wordCount > 10)
+    }
 }
