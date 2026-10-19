@@ -19,7 +19,7 @@ data class UserProfile(
     val continuousMode: Boolean = false,
     val correctionFrequency: String = "normal", // often, normal, rare
     val explanationLang: String = "fr", // fr, en
-    val hasCompletedOnboarding: Boolean = true,
+    val hasCompletedOnboarding: Boolean = false,
     val dailyReminderEnabled: Boolean = false,
     val hasDownloadedInitialPack: Boolean = false,
     val preferredLanguageCode: String = "fr-FR",
@@ -30,7 +30,11 @@ data class UserProfile(
     val companionName: String = "Code",
     val companionGender: String = "neutral", // "boy", "girl", "neutral"
     val hasNamedCompanion: Boolean = false,
-    val geminiApiKey: String = ""
+    val geminiApiKey: String = "",
+    val voiceEngine: String = "google_hd", // "google_hd", "elevenlabs"
+    val elevenLabsApiKey: String = "",
+    val elevenLabsVoiceId: String = "21m00Tcm4TlvDq8ikWAM", // Rachel default
+    val isAgenticHarnessEnabled: Boolean = true
 )
 
 @Entity(tableName = "conversations")

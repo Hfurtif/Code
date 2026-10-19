@@ -8,6 +8,11 @@ import android.util.Log
 import com.example.data.model.AppLanguage
 import java.util.Locale
 
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
+
 data class TtsVoiceInfo(
     val id: String,
     val displayName: String,
@@ -22,6 +27,13 @@ class TtsManager(
     private val onSpeakingStateChanged: (Boolean) -> Unit,
     private val onSpeechCompleted: () -> Unit
 ) : TextToSpeech.OnInitListener {
+
+    val elevenLabsService = ElevenLabsVoiceService(context)
+    private val coroutineScope = CoroutineScope(Dispatchers.Main + Job())
+
+    var voiceEngine: String = "google_hd" // "google_hd", "elevenlabs"
+    var elevenLabsApiKey: String = ""
+    var elevenLabsVoiceId: String = "21m00Tcm4TlvDq8ikWAM" // Rachel default
 
     private var tts: TextToSpeech? = null
     private var isInitialized = false
@@ -221,17 +233,51 @@ class TtsManager(
         return clean
     }
 
+    fun setVoiceEngineConfig(engine: String, apiKey: String, voiceId: String) {
+        voiceEngine = engine
+        elevenLabsApiKey = apiKey
+        elevenLabsVoiceId = voiceId
+    }
+
     fun speak(text: String) {
         val oralText = cleanOralText(text)
         if (oralText.isBlank()) return
 
+        stop()
+
+        if (voiceEngine.equals("elevenlabs", ignoreCase = true) && elevenLabsApiKey.isNotBlank()) {
+            coroutineScope.launch {
+                val success = elevenLabsService.synthesizeAndPlay(
+                    text = oralText,
+                    apiKey = elevenLabsApiKey,
+                    voiceId = elevenLabsVoiceId,
+                    onPlaybackStarted = { onSpeakingStateChanged(true) },
+                    onPlaybackFinished = {
+                        onSpeakingStateChanged(false)
+                        onSpeechCompleted()
+                    },
+                    onError = { errMsg ->
+                        Log.w("TtsManager", "ElevenLabs failed: $errMsg. Falling back to Google HD.")
+                        fallbackGoogleSpeak(oralText)
+                    }
+                )
+                if (!success) {
+                    fallbackGoogleSpeak(oralText)
+                }
+            }
+            return
+        }
+
+        fallbackGoogleSpeak(oralText)
+    }
+
+    private fun fallbackGoogleSpeak(oralText: String) {
         if (!isInitialized) {
             pendingSpeechText = oralText
             return
         }
 
-        stop()
-        val utteranceId = "lilian_utterance_${System.currentTimeMillis()}"
+        val utteranceId = "code_utterance_${System.currentTimeMillis()}"
         val res = tts?.speak(oralText, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
         if (res == TextToSpeech.SUCCESS) {
             onSpeakingStateChanged(true)
@@ -242,10 +288,11 @@ class TtsManager(
 
     fun stop() {
         try {
+            elevenLabsService.stopPlayback()
             if (tts?.isSpeaking == true) {
                 tts?.stop()
-                onSpeakingStateChanged(false)
             }
+            onSpeakingStateChanged(false)
         } catch (e: Exception) {
             Log.e("TtsManager", "Error stopping TTS", e)
         }

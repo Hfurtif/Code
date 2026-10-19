@@ -40,15 +40,19 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Replay
@@ -130,6 +134,8 @@ fun ConversationScreen(
     val userProfile by viewModel.userProfile.collectAsState()
     val activeSource by viewModel.activeSourceForDiscussion.collectAsState()
     val companionDisplayName = userProfile.companionName.ifBlank { "Code" }
+    val vocabList by viewModel.allVocabulary.collectAsState()
+    val agenticState by viewModel.agenticExecutionState.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     var showAddSourceDialog by remember { mutableStateOf(false) }
@@ -195,6 +201,130 @@ fun ConversationScreen(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Flashcards Review Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showFlashcardReview() }
+                            .padding(end = 6.dp)
+                            .testTag("top_flashcards_button"),
+                        color = NeonViolet.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.BookmarkAdd,
+                                contentDescription = "Flashcards",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Flashcards (${vocabList.size})",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // URL Lesson (YouTube, TikTok, Web) Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showUrlLessonDialog() }
+                            .padding(end = 6.dp)
+                            .testTag("top_url_lesson_button"),
+                        color = ElectricBlue.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Link,
+                                contentDescription = "Leçon URL",
+                                tint = ElectricBlue,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Lien URL",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // Harnais Agentique Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showAgenticHarnessDialog() }
+                            .padding(end = 6.dp)
+                            .testTag("top_agentic_harness_button"),
+                        color = NeonCyan.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Hub,
+                                contentDescription = "Harnais Agentique",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Harnais IA",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    // Voix Studio Button (Google HD & ElevenLabs)
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showVoiceStudio() }
+                            .padding(end = 6.dp)
+                            .testTag("top_voice_studio_button"),
+                        color = NeonViolet.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.RecordVoiceOver,
+                                contentDescription = "Studio Voix",
+                                tint = NeonViolet,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Voix",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
                     // Language Switcher Button
                     Surface(
                         modifier = Modifier
@@ -253,6 +383,50 @@ fun ConversationScreen(
                                 fontWeight = FontWeight.Medium
                             )
                         }
+                    }
+                }
+            }
+
+            // Live Agentic Harness Active Banner
+            if (agenticState.isActive) {
+                Surface(
+                    color = NeonCyan.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.showAgenticHarnessDialog() }
+                        .testTag("active_agentic_harness_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                color = NeonCyan,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "🧠 Harnais Agentique (${agenticState.currentStepIndex}/${agenticState.totalSteps}) : ${agenticState.currentActivity}",
+                                    color = NeonCyan,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Objectif : « ${agenticState.goal.take(45)} »",
+                                    color = TextSecondary,
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                        Text("Détails >", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
@@ -476,6 +650,40 @@ fun ConversationScreen(
                                                     fontWeight = FontWeight.Medium
                                                 )
                                             }
+
+                                            if (!isUser) {
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.End
+                                                ) {
+                                                    Surface(
+                                                        color = DarkSurface,
+                                                        shape = RoundedCornerShape(8.dp),
+                                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.4f)),
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(8.dp))
+                                                            .clickable { viewModel.showAddFlashcard(prefilledExample = msg.text) }
+                                                            .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                    ) {
+                                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.BookmarkAdd,
+                                                                contentDescription = "Sauvegarder un mot",
+                                                                tint = NeonCyan,
+                                                                modifier = Modifier.size(11.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "+ Flashcard",
+                                                                color = NeonCyan,
+                                                                fontSize = 10.sp,
+                                                                fontWeight = FontWeight.SemiBold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -657,6 +865,41 @@ fun ConversationScreen(
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
+                                    }
+                                }
+                            }
+
+                            if (liveReply.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.End
+                                ) {
+                                    Surface(
+                                        color = DarkSurface,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable { viewModel.showAddFlashcard(prefilledExample = liveReply) }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            .testTag("save_live_word_button")
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = Icons.Default.BookmarkAdd,
+                                                contentDescription = "Sauvegarder un mot",
+                                                tint = NeonCyan,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "Sauvegarder un mot appris",
+                                                color = NeonCyan,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
                                     }
                                 }
                             }

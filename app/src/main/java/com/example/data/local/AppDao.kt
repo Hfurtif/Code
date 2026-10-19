@@ -90,6 +90,9 @@ interface VocabularyDao {
 
     @Update
     suspend fun updateWord(vocabulary: Vocabulary)
+
+    @Query("DELETE FROM vocabulary WHERE id = :id")
+    suspend fun deleteWordById(id: Long)
 }
 
 @Dao

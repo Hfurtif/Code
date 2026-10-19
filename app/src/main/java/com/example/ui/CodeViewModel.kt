@@ -14,6 +14,8 @@ import com.example.data.model.UserProfile
 import com.example.data.model.Vocabulary
 import com.example.engine.CodeBrain
 import com.example.ui.components.OrbState
+import com.example.agent.AgenticExecutionState
+import com.example.agent.AgenticHarness
 import com.example.voice.SpeechManager
 import com.example.voice.TtsManager
 import com.example.voice.TtsVoiceInfo
@@ -72,6 +74,30 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isCompanionNamingDialogVisible = MutableStateFlow(false)
     val isCompanionNamingDialogVisible: StateFlow<Boolean> = _isCompanionNamingDialogVisible.asStateFlow()
+
+    private val _showOnboardingScreen = MutableStateFlow(false)
+    val showOnboardingScreen: StateFlow<Boolean> = _showOnboardingScreen.asStateFlow()
+
+    private val _isFlashcardReviewVisible = MutableStateFlow(false)
+    val isFlashcardReviewVisible: StateFlow<Boolean> = _isFlashcardReviewVisible.asStateFlow()
+
+    private val _isAddFlashcardVisible = MutableStateFlow(false)
+    val isAddFlashcardVisible: StateFlow<Boolean> = _isAddFlashcardVisible.asStateFlow()
+
+    private val _addFlashcardPrefill = MutableStateFlow(Pair("", ""))
+    val addFlashcardPrefill: StateFlow<Pair<String, String>> = _addFlashcardPrefill.asStateFlow()
+
+    private val _isUrlLessonDialogVisible = MutableStateFlow(false)
+    val isUrlLessonDialogVisible: StateFlow<Boolean> = _isUrlLessonDialogVisible.asStateFlow()
+
+    val agenticHarness = AgenticHarness(application, database)
+    val agenticExecutionState: StateFlow<AgenticExecutionState> = agenticHarness.executionState
+
+    private val _isVoiceStudioVisible = MutableStateFlow(false)
+    val isVoiceStudioVisible: StateFlow<Boolean> = _isVoiceStudioVisible.asStateFlow()
+
+    private val _isAgenticHarnessDialogVisible = MutableStateFlow(false)
+    val isAgenticHarnessDialogVisible: StateFlow<Boolean> = _isAgenticHarnessDialogVisible.asStateFlow()
 
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
@@ -263,10 +289,118 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         ttsManager?.setLanguage(profile.preferredLanguageCode)
         ttsManager?.setSpeechRate(profile.speechRate)
         ttsManager?.setSpeechPitch(profile.speechPitch)
+        ttsManager?.setVoiceEngineConfig(
+            engine = profile.voiceEngine,
+            apiKey = profile.elevenLabsApiKey,
+            voiceId = profile.elevenLabsVoiceId
+        )
         if (profile.voiceId.isNotBlank()) {
             ttsManager?.setVoiceByName(profile.voiceId)
         } else {
             ttsManager?.setVoiceByGenderAndAccent(profile.voiceGender, profile.preferredLanguageCode)
+        }
+    }
+
+    // Voice Studio & ElevenLabs actions
+    fun showVoiceStudio() {
+        _isVoiceStudioVisible.value = true
+    }
+
+    fun hideVoiceStudio() {
+        _isVoiceStudioVisible.value = false
+    }
+
+    fun saveVoiceConfig(engine: String, apiKey: String, voiceId: String, rate: Float, pitch: Float) {
+        viewModelScope.launch {
+            val current = userProfile.value
+            val updated = current.copy(
+                voiceEngine = engine,
+                elevenLabsApiKey = apiKey,
+                elevenLabsVoiceId = voiceId,
+                speechRate = rate,
+                speechPitch = pitch
+            )
+            database.userDao().insertOrUpdate(updated)
+            ttsManager?.setVoiceEngineConfig(engine, apiKey, voiceId)
+            ttsManager?.setSpeechRate(rate)
+            ttsManager?.setSpeechPitch(pitch)
+            _infoBannerMessage.value = if (engine == "elevenlabs") {
+                "Moteur vocal ElevenLabs activé !"
+            } else {
+                "Voix Google HD appliquée."
+            }
+        }
+    }
+
+    fun previewVoiceSample(sampleText: String, engine: String, apiKey: String, voiceId: String) {
+        if (engine.equals("elevenlabs", ignoreCase = true) && apiKey.isNotBlank()) {
+            viewModelScope.launch {
+                _isSpeaking.value = true
+                val ok = ttsManager?.elevenLabsService?.synthesizeAndPlay(
+                    text = sampleText,
+                    apiKey = apiKey,
+                    voiceId = voiceId,
+                    onPlaybackStarted = { _isSpeaking.value = true },
+                    onPlaybackFinished = { _isSpeaking.value = false },
+                    onError = {
+                        _isSpeaking.value = false
+                        ttsManager?.speak(sampleText)
+                    }
+                ) ?: false
+                if (!ok) {
+                    _isSpeaking.value = false
+                    ttsManager?.speak(sampleText)
+                }
+            }
+        } else {
+            ttsManager?.speak(sampleText)
+        }
+    }
+
+    // Agentic Harness actions
+    fun showAgenticHarnessDialog() {
+        _isAgenticHarnessDialogVisible.value = true
+    }
+
+    fun hideAgenticHarnessDialog() {
+        _isAgenticHarnessDialogVisible.value = false
+    }
+
+    fun toggleAgenticHarness(enabled: Boolean) {
+        viewModelScope.launch {
+            val current = userProfile.value
+            database.userDao().insertOrUpdate(current.copy(isAgenticHarnessEnabled = enabled))
+            _infoBannerMessage.value = if (enabled) "Harnais Agentique activé." else "Harnais Agentique désactivé."
+        }
+    }
+
+    fun launchAgenticMission(goal: String) {
+        viewModelScope.launch {
+            _infoBannerMessage.value = "Harnais Agentique : Lancement de la mission..."
+            _statusText.value = "Mission agentique..."
+            _orbState.value = OrbState.THINKING
+            try {
+                val state = agenticHarness.runAgenticLoop(
+                    userGoal = goal,
+                    companionName = userProfile.value.companionName.ifBlank { "Code" }
+                )
+                _liveCodeReply.value = state.finalSynthesis
+                _orbState.value = OrbState.SPEAKING
+                speak(state.finalSynthesis)
+                database.conversationDao().insertMessage(
+                    ConversationMessage(
+                        role = "code",
+                        text = state.finalSynthesis,
+                        mode = "AGENTIC"
+                    )
+                )
+                _infoBannerMessage.value = "Mission terminée ! ${state.extractedFlashcardsCount} flashcards créées."
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Agentic mission failed", e)
+                _infoBannerMessage.value = "Erreur mission agentique : ${e.message}"
+            } finally {
+                _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
+            }
         }
     }
 
@@ -284,6 +418,144 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hideCompanionNamingDialog() {
         _isCompanionNamingDialogVisible.value = false
+    }
+
+    fun showOnboarding() {
+        _showOnboardingScreen.value = true
+    }
+
+    fun hideOnboarding() {
+        _showOnboardingScreen.value = false
+    }
+
+    // Flashcard & Vocabulary actions
+    fun showFlashcardReview() {
+        _isFlashcardReviewVisible.value = true
+    }
+
+    fun hideFlashcardReview() {
+        _isFlashcardReviewVisible.value = false
+    }
+
+    fun showAddFlashcard(prefilledWord: String = "", prefilledExample: String = "") {
+        _addFlashcardPrefill.value = Pair(prefilledWord, prefilledExample)
+        _isAddFlashcardVisible.value = true
+    }
+
+    fun hideAddFlashcard() {
+        _isAddFlashcardVisible.value = false
+    }
+
+    fun saveWord(word: String, translation: String, example: String) {
+        viewModelScope.launch {
+            val cleanWord = word.trim()
+            val cleanTranslation = translation.trim()
+            val cleanExample = example.trim()
+            if (cleanWord.isNotBlank()) {
+                val vocab = Vocabulary(
+                    word = cleanWord,
+                    translation = cleanTranslation.ifBlank { "À réviser" },
+                    example = cleanExample,
+                    masteryLevel = 1,
+                    dateLearned = System.currentTimeMillis(),
+                    nextReviewDate = System.currentTimeMillis() + 86400000L
+                )
+                database.vocabularyDao().insertWord(vocab)
+                _infoBannerMessage.value = "Flashcard enregistrée : « $cleanWord » !"
+                _isAddFlashcardVisible.value = false
+            }
+        }
+    }
+
+    fun updateWordMastery(vocab: Vocabulary, levelDelta: Int) {
+        viewModelScope.launch {
+            val newLevel = (vocab.masteryLevel + levelDelta).coerceIn(1, 5)
+            val reviewDelay = when (newLevel) {
+                1 -> 86400000L // 1 day
+                2 -> 86400000L * 3 // 3 days
+                3 -> 86400000L * 7 // 7 days
+                4 -> 86400000L * 14 // 14 days
+                else -> 86400000L * 30 // 30 days
+            }
+            val updated = vocab.copy(
+                masteryLevel = newLevel,
+                nextReviewDate = System.currentTimeMillis() + reviewDelay
+            )
+            database.vocabularyDao().updateWord(updated)
+        }
+    }
+
+    fun deleteWord(id: Long) {
+        viewModelScope.launch {
+            database.vocabularyDao().deleteWordById(id)
+            _infoBannerMessage.value = "Flashcard supprimée"
+        }
+    }
+
+    fun showUrlLessonDialog() {
+        _isUrlLessonDialogVisible.value = true
+    }
+
+    fun hideUrlLessonDialog() {
+        _isUrlLessonDialogVisible.value = false
+    }
+
+    fun previewTeacherVoice(sampleText: String, voiceGender: String, voiceAccent: String) {
+        ttsManager?.setVoiceByGenderAndAccent(voiceGender, voiceAccent)
+        speak(sampleText)
+    }
+
+    fun completeOnboarding(
+        teacherName: String,
+        personaGender: String,
+        voiceGender: String,
+        voiceAccent: String,
+        level: String
+    ) {
+        viewModelScope.launch {
+            val cleanName = teacherName.trim().ifBlank {
+                when (personaGender.lowercase()) {
+                    "boy" -> "Alex"
+                    "girl" -> "Lina"
+                    else -> "Code"
+                }
+            }
+            val current = userProfile.value
+            val updated = current.copy(
+                companionName = cleanName,
+                companionGender = personaGender,
+                voiceGender = voiceGender,
+                voiceAccent = voiceAccent,
+                level = level,
+                activeRole = "english_teacher",
+                hasCompletedOnboarding = true,
+                hasNamedCompanion = true,
+                hasSelectedInitialLanguage = true
+            )
+            database.userDao().insertOrUpdate(updated)
+            _selectedMode.value = TutorMode.ENGLISH_TEACHER
+            _showOnboardingScreen.value = false
+
+            ttsManager?.setVoiceByGenderAndAccent(voiceGender, voiceAccent)
+
+            val greeting = when (personaGender.lowercase()) {
+                "boy" -> "Hello! I'm $cleanName, your personal AI English teacher! I'm super excited to practice with you. Let's make your English confident and fluent! How are you doing today?"
+                "girl" -> "Hello there! I'm $cleanName, your AI English teacher and conversation partner. Together, we'll master English speaking with confidence and fun! How are you feeling today?"
+                else -> "Welcome! I am $cleanName, your personal AI English teacher. I am configured and ready to guide your conversational practice. What would you like to explore today?"
+            }
+
+            _liveCodeReply.value = greeting
+            _infoBannerMessage.value = "Professeur d'anglais « $cleanName » configuré avec succès !"
+            speak(greeting)
+
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = greeting,
+                    mode = TutorMode.ENGLISH_TEACHER.name
+                )
+            )
+        }
     }
 
     fun setCompanionName(name: String, gender: String, voiceGender: String) {
@@ -381,6 +653,127 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             } finally {
                 _isIngestingSource.value = false
             }
+        }
+    }
+
+    private fun extractKeyVocabularyFromSource(result: com.example.data.remote.IngestedSourceResult): List<Vocabulary> {
+        val now = System.currentTimeMillis()
+        val text = result.fullContent
+        val potentialTerms = listOf(
+            Triple("Insight", "Perspective / Aperçu", "The video provides deep insights into human behavior."),
+            Triple("Perspective", "Point de vue", "From this perspective, we see things in a new light."),
+            Triple("Resilience", "Capacité à surmonter les épreuves", "Resilience is essential to build lasting success."),
+            Triple("Challenge", "Défi stimulant", "She embraced the challenge with confidence."),
+            Triple("Breakthrough", "Avancée majeure", "This scientific discovery represents a major breakthrough."),
+            Triple("Highlight", "Mettre en valeur / Souligner", "The speaker highlighted three fundamental rules."),
+            Triple("Mindset", "État d'esprit", "A positive mindset helps you learn from mistakes.")
+        )
+
+        val selected = potentialTerms.filter { text.contains(it.first, ignoreCase = true) }
+            .take(3)
+            .ifEmpty { potentialTerms.shuffled().take(3) }
+
+        return selected.mapIndexed { idx, (word, translation, example) ->
+            Vocabulary(
+                word = word,
+                translation = translation,
+                example = example,
+                masteryLevel = 1,
+                dateLearned = now,
+                nextReviewDate = now + 86400000L * (idx + 1)
+            )
+        }
+    }
+
+    fun createEnglishLessonFromUrl(url: String, focus: String = "conversation") {
+        val cleanUrl = url.trim()
+        if (cleanUrl.isBlank()) return
+        viewModelScope.launch {
+            _isIngestingSource.value = true
+            _isUrlLessonDialogVisible.value = false
+            _infoBannerMessage.value = "Analyse de la vidéo/page pour ta leçon d'anglais..."
+            try {
+                val result = com.example.data.remote.SourceIngestionService.ingestFromUrl(cleanUrl)
+                val docId = brain.repository.saveIngestedSource(result)
+                val savedDoc = database.documentDao().getDocumentById(docId)
+                _activeSourceForDiscussion.value = savedDoc
+                _selectedMode.value = TutorMode.ENGLISH_TEACHER
+
+                // Extract 3 vocabulary words and store them in Flashcards
+                val extractedWords = extractKeyVocabularyFromSource(result)
+                for (vocab in extractedWords) {
+                    database.vocabularyDao().insertWord(vocab)
+                }
+
+                // Register lesson in local database
+                database.lessonDao().insertLesson(
+                    com.example.data.model.Lesson(
+                        title = "Leçon : ${result.title.take(35)}",
+                        type = "url_lesson",
+                        subject = result.title,
+                        summary = "Leçon d'anglais basée sur : ${result.title} (${result.author}). Focus : $focus.",
+                        wordsLearned = extractedWords.size
+                    )
+                )
+
+                val vocabSummary = extractedWords.joinToString(", ") { "${it.word} (${it.translation})" }
+                val lessonIntro = when (result.type) {
+                    "youtube" -> "I analyzed this YouTube video: \"${result.title}\" by ${result.author}!"
+                    "tiktok" -> "I checked out this TikTok: \"${result.title}\" by ${result.author}!"
+                    else -> "I read through this article: \"${result.title}\"!"
+                }
+
+                val lessonMessage = buildString {
+                    append("$lessonIntro Today, we're using it as context for our English lesson. ")
+                    if (extractedWords.isNotEmpty()) {
+                        append("I've saved ${extractedWords.size} key words to your Flashcards: $vocabSummary. ")
+                    }
+                    when (focus) {
+                        "vocabulary" -> append("Let's focus on vocabulary: How would you summarize what happened in this content using your own English words?")
+                        "quiz" -> append("Quick comprehension question: What was the most important takeaway or argument presented in this content?")
+                        else -> append("Let's practice conversational English: What is your personal opinion or reaction to this topic?")
+                    }
+                }
+
+                _liveCodeReply.value = lessonMessage
+                _infoBannerMessage.value = "Leçon d'anglais prête sur « ${result.title} » !"
+                speak(lessonMessage)
+
+                database.conversationDao().insertMessage(
+                    com.example.data.model.ConversationMessage(
+                        role = "code",
+                        text = lessonMessage,
+                        mode = TutorMode.ENGLISH_TEACHER.name,
+                        webSourceUrl = cleanUrl,
+                        webSearchTopic = result.title
+                    )
+                )
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error creating lesson from url", e)
+                _infoBannerMessage.value = "Impossible d'analyser cette URL pour la leçon d'anglais."
+            } finally {
+                _isIngestingSource.value = false
+            }
+        }
+    }
+
+    fun startEnglishLessonFromSource(doc: com.example.data.model.DownloadedDocument) {
+        viewModelScope.launch {
+            _activeSourceForDiscussion.value = doc
+            _selectedMode.value = TutorMode.ENGLISH_TEACHER
+            val intro = "Awesome! Let's practice English using your source: \"${doc.title}\". What is the main idea you remember from this content?"
+            _liveCodeReply.value = intro
+            _infoBannerMessage.value = "Leçon d'anglais démarrée sur « ${doc.title} » !"
+            speak(intro)
+            database.conversationDao().insertMessage(
+                com.example.data.model.ConversationMessage(
+                    role = "code",
+                    text = intro,
+                    mode = TutorMode.ENGLISH_TEACHER.name,
+                    webSourceUrl = doc.authorOrSource,
+                    webSearchTopic = doc.title
+                )
+            )
         }
     }
 
@@ -580,6 +973,34 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             // Update UI
             _liveUserTranscript.value = text
             _orbState.value = OrbState.THINKING
+
+            val currentProfile = userProfile.value
+            if (currentProfile.isAgenticHarnessEnabled && agenticHarness.shouldTriggerAgenticWorkflow(text)) {
+                _statusText.value = "Harnais Agentique : Action en cours..."
+                try {
+                    val agenticResult = agenticHarness.runAgenticLoop(
+                        userGoal = text,
+                        companionName = currentProfile.companionName.ifBlank { "Code" }
+                    )
+                    _liveCodeReply.value = agenticResult.finalSynthesis
+                    _orbState.value = OrbState.SPEAKING
+                    speak(agenticResult.finalSynthesis)
+                    database.conversationDao().insertMessage(
+                        ConversationMessage(
+                            role = "code",
+                            text = agenticResult.finalSynthesis,
+                            mode = "AGENTIC"
+                        )
+                    )
+                    _infoBannerMessage.value = "Mission achevée (${agenticResult.extractedFlashcardsCount} flashcards ajoutées)."
+                } catch (e: Exception) {
+                    android.util.Log.e("CodeViewModel", "Agentic harness failed", e)
+                    _infoBannerMessage.value = "Erreur mission agentique : ${e.message}"
+                } finally {
+                    _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
+                }
+                return@launch
+            }
 
             val isUrl = com.example.data.remote.SourceIngestionService.extractUrl(text) != null
             if (isUrl) {

@@ -61,11 +61,16 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import com.example.ui.CodeViewModel
+import com.example.ui.screens.AddFlashcardDialog
 import com.example.ui.screens.CompanionNamingDialog
 import com.example.ui.screens.ConversationScreen
+import com.example.ui.screens.FlashcardsReviewDialog
 import com.example.ui.screens.LanguageSelectionDialog
 import com.example.ui.screens.SettingsScreen
 import com.example.ui.screens.SourcesScreen
+import com.example.ui.screens.UrlLessonDialog
+import com.example.ui.screens.VoiceStudioDialog
+import com.example.ui.screens.AgenticHarnessDialog
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.MyApplicationTheme
@@ -73,6 +78,8 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+
+import com.example.ui.screens.TeacherOnboardingScreen
 
 sealed class NavTab(
     val route: String,
@@ -108,10 +115,18 @@ fun MainAppContainer(viewModel: CodeViewModel) {
 
     val infoBanner by viewModel.infoBannerMessage.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
+    val showOnboardingScreen by viewModel.showOnboardingScreen.collectAsState()
     val isLanguageDialogVisible by viewModel.isLanguageDialogVisible.collectAsState()
     val isCompanionNamingDialogVisible by viewModel.isCompanionNamingDialogVisible.collectAsState()
-    val showInitialCompanionNamingDialog = !userProfile.hasNamedCompanion
-    val showInitialLanguageDialog = userProfile.hasNamedCompanion && !userProfile.hasSelectedInitialLanguage
+    val isFlashcardReviewVisible by viewModel.isFlashcardReviewVisible.collectAsState()
+    val isAddFlashcardVisible by viewModel.isAddFlashcardVisible.collectAsState()
+    val addFlashcardPrefill by viewModel.addFlashcardPrefill.collectAsState()
+    val isUrlLessonDialogVisible by viewModel.isUrlLessonDialogVisible.collectAsState()
+    val isVoiceStudioVisible by viewModel.isVoiceStudioVisible.collectAsState()
+    val isAgenticHarnessDialogVisible by viewModel.isAgenticHarnessDialogVisible.collectAsState()
+    val agenticState by viewModel.agenticExecutionState.collectAsState()
+
+    val shouldShowOnboarding = !userProfile.hasCompletedOnboarding || showOnboardingScreen
 
     // Runtime Permission for Microphone
     var hasRecordAudioPermission by remember {
@@ -136,6 +151,16 @@ fun MainAppContainer(viewModel: CodeViewModel) {
         if (!hasRecordAudioPermission) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    if (shouldShowOnboarding) {
+        TeacherOnboardingScreen(
+            viewModel = viewModel,
+            onDismiss = if (userProfile.hasCompletedOnboarding) {
+                { viewModel.hideOnboarding() }
+            } else null
+        )
+        return
     }
 
     val tabs = listOf(
@@ -237,13 +262,13 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 }
             }
 
-            // Companion Naming Modal Dialog (First launch or manual change from Settings)
-            if (showInitialCompanionNamingDialog || isCompanionNamingDialogVisible) {
+            // Companion Naming Modal Dialog (if opened manually from Settings)
+            if (isCompanionNamingDialogVisible) {
                 CompanionNamingDialog(
                     initialName = userProfile.companionName,
                     initialGender = userProfile.companionGender,
                     initialVoiceGender = userProfile.voiceGender,
-                    isFirstLaunch = showInitialCompanionNamingDialog,
+                    isFirstLaunch = false,
                     onConfirm = { name, gender, voiceGender ->
                         viewModel.setCompanionName(name, gender, voiceGender)
                     },
@@ -253,8 +278,8 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 )
             }
 
-            // Language Selection Modal Dialog (First launch or manual change)
-            if (showInitialLanguageDialog || isLanguageDialogVisible) {
+            // Language Selection Modal Dialog (if opened manually)
+            if (isLanguageDialogVisible) {
                 LanguageSelectionDialog(
                     currentLanguageCode = userProfile.preferredLanguageCode,
                     onSelectLanguage = { lang ->
@@ -263,7 +288,70 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                     onDismiss = {
                         viewModel.hideLanguageDialog()
                     },
-                    isFirstLaunch = showInitialLanguageDialog
+                    isFirstLaunch = false
+                )
+            }
+
+            // Flashcards Review Fullscreen Dialog
+            if (isFlashcardReviewVisible) {
+                FlashcardsReviewDialog(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.hideFlashcardReview() }
+                )
+            }
+
+            // Add Flashcard Modal Dialog
+            if (isAddFlashcardVisible) {
+                AddFlashcardDialog(
+                    initialWord = addFlashcardPrefill.first,
+                    initialExample = addFlashcardPrefill.second,
+                    onSaveWord = { word, translation, example ->
+                        viewModel.saveWord(word, translation, example)
+                    },
+                    onSpeakWord = { word ->
+                        viewModel.speak(word)
+                    },
+                    onDismiss = { viewModel.hideAddFlashcard() }
+                )
+            }
+
+            // URL English Lesson Modal Dialog
+            if (isUrlLessonDialogVisible) {
+                UrlLessonDialog(
+                    companionName = userProfile.companionName.ifBlank { "Code" },
+                    onCreateLesson = { url, focus ->
+                        viewModel.createEnglishLessonFromUrl(url, focus)
+                    },
+                    onDismiss = { viewModel.hideUrlLessonDialog() }
+                )
+            }
+
+            // Voice Studio Dialog (Google HD & ElevenLabs)
+            if (isVoiceStudioVisible) {
+                VoiceStudioDialog(
+                    currentEngine = userProfile.voiceEngine,
+                    currentApiKey = userProfile.elevenLabsApiKey,
+                    currentVoiceId = userProfile.elevenLabsVoiceId,
+                    currentSpeechRate = userProfile.speechRate,
+                    currentSpeechPitch = userProfile.speechPitch,
+                    onSaveVoiceConfig = { engine, apiKey, voiceId, rate, pitch ->
+                        viewModel.saveVoiceConfig(engine, apiKey, voiceId, rate, pitch)
+                    },
+                    onPreviewVoice = { sampleText, engine, apiKey, voiceId ->
+                        viewModel.previewVoiceSample(sampleText, engine, apiKey, voiceId)
+                    },
+                    onDismiss = { viewModel.hideVoiceStudio() }
+                )
+            }
+
+            // Agentic Harness Dialog (Autonomous ReAct loops & trace inspector)
+            if (isAgenticHarnessDialogVisible) {
+                AgenticHarnessDialog(
+                    agenticState = agenticState,
+                    isHarnessEnabled = userProfile.isAgenticHarnessEnabled,
+                    onToggleHarness = { viewModel.toggleAgenticHarness(it) },
+                    onLaunchMission = { viewModel.launchAgenticMission(it) },
+                    onDismiss = { viewModel.hideAgenticHarnessDialog() }
                 )
             }
         }

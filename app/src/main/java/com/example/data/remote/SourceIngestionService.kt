@@ -211,28 +211,34 @@ object SourceIngestionService {
                 // Extract description from meta tags or ytInitialPlayerResponse
                 val descMatcher = Pattern.compile("(?i)<meta[^>]*name=[\"']description[\"'][^>]*content=[\"'](.*?)[\"']").matcher(html)
                 if (descMatcher.find()) {
-                    fullDescription = cleanHtmlEntities(descMatcher.group(1).trim())
+                    val g = descMatcher.group(1)
+                    if (g != null) {
+                        fullDescription = cleanHtmlEntities(g.trim())
+                    }
                 }
 
                 // Check for caption tracks in ytInitialPlayerResponse JSON
                 val captionTrackMatcher = Pattern.compile("\"captionTracks\":\\s*(\\[.*?\\])").matcher(html)
                 if (captionTrackMatcher.find()) {
-                    val rawTracks = captionTrackMatcher.group(1)
+                    val rawTracks = captionTrackMatcher.group(1) ?: ""
                     val baseUrlMatcher = Pattern.compile("\"baseUrl\":\\s*\"(https:[^\"]+)\"").matcher(rawTracks)
                     if (baseUrlMatcher.find()) {
-                        val rawCaptionUrl = baseUrlMatcher.group(1).replace("\\u0026", "&")
-                        try {
-                            val capReq = Request.Builder().url(rawCaptionUrl).build()
-                            val capResp = httpClient.newCall(capReq).execute()
-                            if (capResp.isSuccessful) {
-                                val xml = capResp.body?.string() ?: ""
-                                val parsedTranscript = extractTranscriptFromXml(xml)
-                                if (parsedTranscript.isNotBlank()) {
-                                    transcript = parsedTranscript
+                        val g = baseUrlMatcher.group(1)
+                        if (g != null) {
+                            val rawCaptionUrl = g.replace("\\u0026", "&")
+                            try {
+                                val capReq = Request.Builder().url(rawCaptionUrl).build()
+                                val capResp = httpClient.newCall(capReq).execute()
+                                if (capResp.isSuccessful) {
+                                    val xml = capResp.body?.string() ?: ""
+                                    val parsedTranscript = extractTranscriptFromXml(xml)
+                                    if (parsedTranscript.isNotBlank()) {
+                                        transcript = parsedTranscript
+                                    }
                                 }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Caption fetch error: ${e.message}")
                             }
-                        } catch (e: Exception) {
-                            Log.w(TAG, "Caption fetch error: ${e.message}")
                         }
                     }
                 }
@@ -289,9 +295,12 @@ object SourceIngestionService {
         val sb = java.lang.StringBuilder()
         val matcher = Pattern.compile("(?is)<text[^>]*>(.*?)</text>").matcher(xml)
         while (matcher.find()) {
-            val line = cleanHtmlEntities(matcher.group(1)).trim()
-            if (line.isNotBlank()) {
-                sb.append(line).append(" ")
+            val raw = matcher.group(1)
+            if (raw != null) {
+                val line = cleanHtmlEntities(raw).trim()
+                if (line.isNotBlank()) {
+                    sb.append(line).append(" ")
+                }
             }
         }
         return sb.toString().trim()
@@ -368,19 +377,19 @@ object SourceIngestionService {
 
                 // Extract title
                 val titleMatcher = Pattern.compile("(?i)<title>(.*?)</title>").matcher(html)
-                var rawTitle = if (titleMatcher.find()) titleMatcher.group(1).trim() else ""
+                var rawTitle = if (titleMatcher.find()) titleMatcher.group(1)?.trim() ?: "" else ""
                 if (rawTitle.isBlank()) {
                     val ogTitle = Pattern.compile("(?i)<meta[^>]*property=[\"']og:title[\"'][^>]*content=[\"'](.*?)[\"']").matcher(html)
-                    rawTitle = if (ogTitle.find()) ogTitle.group(1).trim() else "Page Web"
+                    rawTitle = if (ogTitle.find()) ogTitle.group(1)?.trim() ?: "Page Web" else "Page Web"
                 }
                 val cleanTitle = cleanHtmlEntities(rawTitle).take(120)
 
                 // Extract description
                 val descMatcher = Pattern.compile("(?i)<meta[^>]*name=[\"']description[\"'][^>]*content=[\"'](.*?)[\"']").matcher(html)
-                var metaDesc = if (descMatcher.find()) descMatcher.group(1).trim() else ""
+                var metaDesc = if (descMatcher.find()) descMatcher.group(1)?.trim() ?: "" else ""
                 if (metaDesc.isBlank()) {
                     val ogDesc = Pattern.compile("(?i)<meta[^>]*property=[\"']og:description[\"'][^>]*content=[\"'](.*?)[\"']").matcher(html)
-                    metaDesc = if (ogDesc.find()) ogDesc.group(1).trim() else ""
+                    metaDesc = if (ogDesc.find()) ogDesc.group(1)?.trim() ?: "" else ""
                 }
                 metaDesc = cleanHtmlEntities(metaDesc)
 

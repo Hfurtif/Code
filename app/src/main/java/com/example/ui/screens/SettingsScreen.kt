@@ -18,9 +18,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Face
+import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.RecordVoiceOver
@@ -77,6 +80,7 @@ fun SettingsScreen(
 ) {
     val profile by viewModel.userProfile.collectAsState()
     val voices by viewModel.availableVoices.collectAsState()
+    val vocabList by viewModel.allVocabulary.collectAsState()
 
     var rateSlider by remember(profile.speechRate) { mutableFloatStateOf(profile.speechRate) }
     var pitchSlider by remember(profile.speechPitch) { mutableFloatStateOf(profile.speechPitch) }
@@ -160,17 +164,178 @@ fun SettingsScreen(
                         Spacer(modifier = Modifier.height(12.dp))
 
                         Button(
+                            onClick = { viewModel.showOnboarding() },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(46.dp)
+                                .testTag("reopen_onboarding_studio_button")
+                        ) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Configurer le Professeur d'Anglais (Nom & Persona)", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Button(
                             onClick = { viewModel.showCompanionNamingDialog() },
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                            colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorderViolet),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(42.dp)
+                                .testTag("change_companion_name_button")
+                        ) {
+                            Icon(Icons.Default.Edit, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Renommer rapidement", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
+
+            // Flashcards & Vocabulary Card
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = NeonCyan,
+                    backgroundColor = DarkSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.MenuBook, contentDescription = null, tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Mes Flashcards de Révision",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Surface(
+                                color = NeonCyan.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    text = "${vocabList.size} mots",
+                                    color = NeonCyan,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Text(
+                            text = "Révise les nouveaux mots et expressions enregistrés pendant tes discussions avec ton professeur.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = { viewModel.showFlashcardReview() },
+                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1.5f)
+                                    .height(44.dp)
+                                    .testTag("open_flashcards_from_settings")
+                            ) {
+                                Icon(Icons.Default.MenuBook, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Réviser mes mots", color = Color.Black, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            Button(
+                                onClick = { viewModel.showAddFlashcard() },
+                                colors = ButtonDefaults.buttonColors(containerColor = DarkSurface),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                                shape = RoundedCornerShape(10.dp),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(44.dp)
+                                    .testTag("add_flashcard_from_settings")
+                            ) {
+                                Icon(Icons.Default.BookmarkAdd, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("+ Ajouter", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Agentic Harness Card (Multi-step autonomy, tool execution & traces)
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = NeonCyan,
+                    backgroundColor = DarkSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.Hub, contentDescription = null, tint = NeonCyan)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Harnais Agentique Autonome",
+                                color = TextPrimary,
+                                fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Spacer(modifier = Modifier.weight(1f))
+                            Switch(
+                                checked = profile.isAgenticHarnessEnabled,
+                                onCheckedChange = { viewModel.toggleAgenticHarness(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = NeonCyan,
+                                    checkedTrackColor = NeonCyan.copy(alpha = 0.4f),
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = DarkSurface
+                                )
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+
+                        Text(
+                            text = "Permet à Code d'exécuter des missions complexes en plusieurs étapes : recherche web en direct, assimilation de liens YouTube/TikTok, génération automatique de flashcards et quiz.",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        Button(
+                            onClick = { viewModel.showAgenticHarnessDialog() },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(44.dp)
-                                .testTag("change_companion_name_button")
+                                .testTag("open_agentic_harness_studio_button")
                         ) {
-                            Icon(Icons.Default.Edit, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.Hub, contentDescription = null, tint = Color.Black, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Changer le prénom ou le genre", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Ouvrir l'Inspecteur du Harnais Agentique", color = Color.Black, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -191,6 +356,28 @@ fun SettingsScreen(
                                 text = "Voix de synthèse (SpeechSynthesis)",
                                 color = TextPrimary,
                                 fontSize = 15.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Voice Studio Button (Google HD & ElevenLabs)
+                        Button(
+                            onClick = { viewModel.showVoiceStudio() },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(44.dp)
+                                .testTag("open_voice_studio_button")
+                        ) {
+                            Icon(Icons.Default.RecordVoiceOver, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = if (profile.voiceEngine == "elevenlabs") "Studio Voix (ElevenLabs AI Actif)" else "Studio Voix (Google HD Actif)",
+                                color = Color.White,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }

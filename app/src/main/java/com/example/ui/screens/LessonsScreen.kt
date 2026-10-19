@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
@@ -221,6 +222,101 @@ fun LessonsScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
+                    // URL-Based English Lesson Card (YouTube, TikTok, Web)
+                    item {
+                        GlassCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("url_lesson_banner_card"),
+                            borderColor = ElectricBlue,
+                            backgroundColor = DarkSurfaceVariant
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Surface(
+                                            shape = CircleShape,
+                                            color = ElectricBlue.copy(alpha = 0.2f),
+                                            modifier = Modifier.size(36.dp)
+                                        ) {
+                                            Box(contentAlignment = Alignment.Center) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Link,
+                                                    contentDescription = null,
+                                                    tint = ElectricBlue,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Column {
+                                            Text(
+                                                text = "Cours d'anglais par Lien URL",
+                                                color = TextPrimary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "YouTube • TikTok • Articles Web",
+                                                color = ElectricBlue,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                    Surface(
+                                        color = ElectricBlue.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(12.dp)
+                                    ) {
+                                        Text(
+                                            text = "NOUVEAU",
+                                            color = ElectricBlue,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Colle le lien d'une vidéo YouTube, d'un TikTok ou d'une page web. Ton professeur analysera le contenu et créera une leçon d'anglais interactive avec vocabulaire et quiz !",
+                                    color = TextSecondary,
+                                    fontSize = 11.sp,
+                                    lineHeight = 16.sp
+                                )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Button(
+                                    onClick = {
+                                        viewModel.showUrlLessonDialog()
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("open_url_lesson_dialog_button")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.PlayArrow,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "Créer un cours depuis un lien (YouTube, TikTok, Web)",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     // Custom Subject Input Card
                     item {
                         GlassCard(
