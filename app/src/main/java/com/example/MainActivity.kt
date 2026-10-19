@@ -71,6 +71,7 @@ import com.example.ui.screens.SourcesScreen
 import com.example.ui.screens.UrlLessonDialog
 import com.example.ui.screens.VoiceStudioDialog
 import com.example.ui.screens.AgenticHarnessDialog
+import com.example.ui.screens.VoiceCommandDialog
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.MyApplicationTheme
@@ -124,6 +125,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val isUrlLessonDialogVisible by viewModel.isUrlLessonDialogVisible.collectAsState()
     val isVoiceStudioVisible by viewModel.isVoiceStudioVisible.collectAsState()
     val isAgenticHarnessDialogVisible by viewModel.isAgenticHarnessDialogVisible.collectAsState()
+    val isVoiceCommandDialogVisible by viewModel.isVoiceCommandDialogVisible.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
 
     val shouldShowOnboarding = !userProfile.hasCompletedOnboarding || showOnboardingScreen
@@ -352,6 +354,14 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                     onToggleHarness = { viewModel.toggleAgenticHarness(it) },
                     onLaunchMission = { viewModel.launchAgenticMission(it) },
                     onDismiss = { viewModel.hideAgenticHarnessDialog() }
+                )
+            }
+
+            // Voice Commands & STT Help Dialog
+            if (isVoiceCommandDialogVisible) {
+                VoiceCommandDialog(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.hideVoiceCommandHelp() }
                 )
             }
         }

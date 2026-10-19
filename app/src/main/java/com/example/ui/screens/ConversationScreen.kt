@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -41,9 +42,12 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.BookmarkAdd
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -136,6 +140,7 @@ fun ConversationScreen(
     val companionDisplayName = userProfile.companionName.ifBlank { "Code" }
     val vocabList by viewModel.allVocabulary.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
+    val lastVoiceCommandBanner by viewModel.lastVoiceCommandBanner.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     var showAddSourceDialog by remember { mutableStateOf(false) }
@@ -325,6 +330,37 @@ fun ConversationScreen(
                         }
                     }
 
+                    // Commandes Vocales Button
+                    Surface(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { viewModel.showVoiceCommandHelp() }
+                            .padding(end = 6.dp)
+                            .testTag("top_voice_commands_button"),
+                        color = NeonCyan.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Hearing,
+                                contentDescription = "Commandes Vocales",
+                                tint = NeonCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = "Commandes",
+                                color = TextPrimary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
                     // Language Switcher Button
                     Surface(
                         modifier = Modifier
@@ -381,6 +417,52 @@ fun ConversationScreen(
                                 color = if (isOnline) TextPrimary else OfflineAmber,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Voice Command Acknowledgment Banner
+            lastVoiceCommandBanner?.let { banner ->
+                Surface(
+                    color = NeonCyan.copy(alpha = 0.18f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.7f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp)
+                        .testTag("voice_command_feedback_banner")
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = banner,
+                                color = TextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        IconButton(
+                            onClick = { viewModel.clearVoiceCommandBanner() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "Fermer",
+                                tint = TextSecondary,
+                                modifier = Modifier.size(14.dp)
                             )
                         }
                     }
@@ -1055,6 +1137,76 @@ fun ConversationScreen(
                                         fontSize = 11.sp
                                     )
                                 }
+
+                                Spacer(modifier = Modifier.height(8.dp))
+                                // Audio level visualizer
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.GraphicEq,
+                                        contentDescription = null,
+                                        tint = AlertPink,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Box(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .height(4.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(DarkSurfaceVariant)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxHeight()
+                                                .fillMaxWidth(audioRms.coerceIn(0.08f, 1f))
+                                                .clip(RoundedCornerShape(2.dp))
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        listOf(NeonCyan, AlertPink)
+                                                    )
+                                                )
+                                        )
+                                    }
+                                }
+
+                                Spacer(modifier = Modifier.height(6.dp))
+                                // Quick voice command chips
+                                androidx.compose.foundation.lazy.LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    val quickHints = listOf(
+                                        "Mode prof d'anglais",
+                                        "Recherche sur internet...",
+                                        "Lance un quiz",
+                                        "Répète",
+                                        "Stop",
+                                        "Change de voix"
+                                    )
+                                    items(quickHints) { hint ->
+                                        Surface(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    viewModel.executeVoiceCommandText(hint)
+                                                },
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = DarkSurfaceVariant,
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
+                                        ) {
+                                            Text(
+                                                text = hint,
+                                                color = NeonCyan,
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -1232,6 +1384,21 @@ fun ConversationScreen(
                             focusedContainerColor = DarkSurface,
                             unfocusedContainerColor = DarkSurface
                         ),
+                        trailingIcon = {
+                            IconButton(
+                                onClick = { viewModel.toggleListening() },
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .testTag("inline_mic_dictation_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
+                                    contentDescription = "Dictée vocale STT",
+                                    tint = if (isListening) AlertPink else NeonCyan,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        },
                         singleLine = true
                     )
                     Spacer(modifier = Modifier.width(8.dp))

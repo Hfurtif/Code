@@ -14,8 +14,8 @@ private val DarkColorScheme = darkColorScheme(
     secondary = NeonViolet,
     onSecondary = Color.White,
     secondaryContainer = DarkSurfaceVariant,
-    onSecondaryContainer = NeonViolet,
-    tertiary = AlertPink,
+    onSecondaryContainer = NeonMagenta,
+    tertiary = NeonMagenta,
     onTertiary = Color.White,
     background = DarkBackground,
     onBackground = TextPrimary,
@@ -31,7 +31,7 @@ private val DarkColorScheme = darkColorScheme(
 @Composable
 fun MyApplicationTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
-    dynamicColor: Boolean = false, // Keep consistent futuristic dark theme
+    dynamicColor: Boolean = false, // Keep consistent futuristic dark theme aligned with icon
     content: @Composable () -> Unit
 ) {
     MaterialTheme(

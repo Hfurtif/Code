@@ -21,8 +21,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.NeonCyan
+import com.example.ui.theme.NeonMagenta
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.OfflineAmber
 import kotlin.math.PI
@@ -103,7 +105,7 @@ fun AnimatedOrb(
                     // Inner glowing orb
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color.White, NeonCyan, NeonViolet, Color(0xFF05060F)),
+                            colors = listOf(Color.White, NeonCyan, NeonMagenta, DarkBackground),
                             center = center,
                             radius = radius
                         ),
@@ -140,7 +142,7 @@ fun AnimatedOrb(
                     // Glowing active core
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color.White, NeonCyan, ElectricBlue, Color(0xFF05060F)),
+                            colors = listOf(Color.White, NeonCyan, ElectricBlue, DarkBackground),
                             center = center,
                             radius = radius
                         ),
@@ -161,7 +163,7 @@ fun AnimatedOrb(
                     // Deep swirling background
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(NeonViolet, ElectricBlue, Color(0xFF05060F)),
+                            colors = listOf(NeonMagenta, NeonViolet, ElectricBlue, DarkBackground),
                             center = center,
                             radius = radius * 1.3f
                         ),
@@ -185,7 +187,7 @@ fun AnimatedOrb(
                         val orbitRadius = radius * (1.1f + 0.12f * sin(angleRad * 2f))
                         val px = center.x + orbitRadius * cos(angleRad)
                         val py = center.y + orbitRadius * sin(angleRad)
-                        val pColor = if (i % 2 == 0) NeonCyan else NeonViolet
+                        val pColor = if (i % 2 == 0) NeonCyan else NeonMagenta
 
                         drawCircle(
                             color = pColor,
@@ -201,7 +203,7 @@ fun AnimatedOrb(
                     // Radiant pulse glow
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(NeonCyan.copy(alpha = 0.35f), NeonViolet.copy(alpha = 0.15f), Color.Transparent),
+                            colors = listOf(NeonCyan.copy(alpha = 0.35f), NeonMagenta.copy(alpha = 0.18f), Color.Transparent),
                             center = center,
                             radius = radius * 1.4f
                         ),
@@ -226,7 +228,7 @@ fun AnimatedOrb(
                     drawPath(
                         path = wavePath,
                         brush = Brush.radialGradient(
-                            colors = listOf(Color.White, NeonCyan, NeonViolet, ElectricBlue),
+                            colors = listOf(Color.White, NeonCyan, NeonMagenta, NeonViolet, ElectricBlue),
                             center = center,
                             radius = radius * 1.1f
                         )
@@ -253,7 +255,7 @@ fun AnimatedOrb(
                     )
                     drawCircle(
                         brush = Brush.radialGradient(
-                            colors = listOf(Color(0xFFFFD54F), OfflineAmber, Color(0xFF4A148C), Color(0xFF05060F)),
+                            colors = listOf(Color(0xFFFFD54F), OfflineAmber, Color(0xFF4A148C), DarkBackground),
                             center = center,
                             radius = radius
                         ),

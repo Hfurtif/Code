@@ -2,6 +2,7 @@ package com.example.voice
 
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -11,9 +12,8 @@ import android.speech.SpeechRecognizer
 import android.util.Log
 
 /**
- * Continuous WhatsApp-style speech manager.
- * Once activated by the user, it KEEPS LISTENING indefinitely without auto-cutting off,
- * even through pauses, breaths, or silences, until the user EXPLICITLY taps the mic to finish.
+ * Continuous Speech-to-Text manager with on-device / system recognizer support,
+ * real-time partial transcription, RMS audio level feedback, and error recovery.
  */
 class SpeechManager(
     private val context: Context,
@@ -31,17 +31,25 @@ class SpeechManager(
     private val mainHandler = Handler(Looper.getMainLooper())
     private var restartAttemptCount = 0
 
+    companion object {
+        private const val TAG = "SpeechManager"
+        private const val MAX_CONSECUTIVE_RESTARTS = 3
+    }
+
     fun isAvailable(): Boolean {
         return SpeechRecognizer.isRecognitionAvailable(context)
     }
 
+    fun isOnDeviceAvailable(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+        } else {
+            false
+        }
+    }
+
     fun startListening(languageCode: String = "fr-FR") {
         mainHandler.post {
-            if (!isAvailable()) {
-                onErrorOccurred("Reconnaissance vocale non disponible sur cet appareil. Tu peux utiliser la zone de texte pour discuter avec Code !")
-                return@post
-            }
-
             userWantsToRecord = true
             currentLanguage = languageCode
             accumulatedText = ""
@@ -59,7 +67,15 @@ class SpeechManager(
         cleanupRecognizerOnly()
 
         try {
-            speechRecognizer = SpeechRecognizer.createSpeechRecognizer(context).apply {
+            val recognizer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+                SpeechRecognizer.isOnDeviceRecognitionAvailable(context)
+            ) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(context)
+            } else {
+                SpeechRecognizer.createSpeechRecognizer(context)
+            }
+
+            speechRecognizer = recognizer.apply {
                 setRecognitionListener(object : RecognitionListener {
                     override fun onReadyForSpeech(params: Bundle?) {
                         if (userWantsToRecord) {
@@ -68,6 +84,7 @@ class SpeechManager(
                     }
 
                     override fun onBeginningOfSpeech() {
+                        restartAttemptCount = 0
                         if (userWantsToRecord) {
                             onListeningStateChanged(true)
                         }
@@ -81,50 +98,53 @@ class SpeechManager(
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
-                        // Crucial: Android's recognizer detects a pause in speech.
-                        // DO NOT stop listening! If the user wants to keep recording,
-                        // we let onResults deliver words, then seamlessly restart to capture more!
+                        // Pause detected in speech. We let onResults fold in the chunk,
+                        // and continue listening if user hasn't clicked stop.
                     }
 
                     override fun onError(error: Int) {
-                        Log.d("SpeechManager", "SpeechRecognizer onError: $error (userWantsToRecord=$userWantsToRecord)")
+                        Log.d(TAG, "SpeechRecognizer onError: $error (userWantsToRecord=$userWantsToRecord, restarts=$restartAttemptCount)")
 
-                        // If user has stopped recording, ignore errors
                         if (!userWantsToRecord) return
-
-                        // If recognizer hit timeout, no match, or transient network/audio error during pause:
-                        // NEVER cut off the user! Silently restart listening so user can speak again.
-                        if (error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT ||
-                            error == SpeechRecognizer.ERROR_NO_MATCH ||
-                            error == SpeechRecognizer.ERROR_NETWORK ||
-                            error == SpeechRecognizer.ERROR_NETWORK_TIMEOUT ||
-                            error == SpeechRecognizer.ERROR_CLIENT
-                        ) {
-                            // If we have some partial text in flight, fold it into accumulatedText
-                            if (lastPartialText.isNotBlank()) {
-                                val chunk = lastPartialText.trim()
-                                accumulatedText = if (accumulatedText.isBlank()) chunk else "$accumulatedText $chunk"
-                                lastPartialText = ""
-                                onPartialResult(accumulatedText)
-                            }
-                            restartListeningSafely()
-                            return
-                        }
 
                         if (error == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS) {
                             userWantsToRecord = false
                             onListeningStateChanged(false)
                             cleanupRecognizerOnly()
-                            onErrorOccurred("Permission micro requise pour parler avec Code.")
+                            onErrorOccurred("Permission microphone requise pour utiliser la reconnaissance vocale.")
                             return
                         }
 
-                        // For any other unexpected error, attempt to keep listening
+                        // Fold any in-flight partial text into accumulated text
+                        if (lastPartialText.isNotBlank()) {
+                            val chunk = lastPartialText.trim()
+                            accumulatedText = if (accumulatedText.isBlank()) chunk else "$accumulatedText $chunk"
+                            lastPartialText = ""
+                            onPartialResult(accumulatedText)
+                        }
+
+                        // Check if we hit max consecutive restarts without speech input
+                        if (restartAttemptCount >= MAX_CONSECUTIVE_RESTARTS) {
+                            val total = accumulatedText.trim()
+                            userWantsToRecord = false
+                            onListeningStateChanged(false)
+                            cleanupRecognizerOnly()
+
+                            if (total.isNotBlank()) {
+                                onFinalResult(total)
+                            } else {
+                                onErrorOccurred("Microphone : fin d'écoute. Tu peux réappuyer sur le micro ou taper ton message.")
+                            }
+                            return
+                        }
+
+                        restartAttemptCount++
                         restartListeningSafely()
                     }
 
                     override fun onResults(results: Bundle?) {
-                        Log.d("SpeechManager", "SpeechRecognizer onResults received")
+                        Log.d(TAG, "SpeechRecognizer onResults received")
+                        restartAttemptCount = 0
 
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val spokenChunk = matches?.firstOrNull()?.trim() ?: lastPartialText.trim()
@@ -135,14 +155,14 @@ class SpeechManager(
                             onPartialResult(accumulatedText)
                         }
 
-                        // If the user has NOT pressed the button to finish:
-                        // DO NOT STOP! Keep listening for the next sentence!
+                        // If user is still recording, continue listening seamlessly
                         if (userWantsToRecord) {
                             restartListeningSafely()
                         }
                     }
 
                     override fun onPartialResults(partialResults: Bundle?) {
+                        restartAttemptCount = 0
                         val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val partial = matches?.firstOrNull()?.trim()
                         if (!partial.isNullOrBlank()) {
@@ -159,19 +179,27 @@ class SpeechManager(
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE, currentLanguage)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, currentLanguage)
+                putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                // Configure generous pause thresholds
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 5000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
-                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 3000L)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                // Relaxed silence thresholds for natural pausing
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 4000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 3000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 2000L)
             }
 
             speechRecognizer?.startListening(intent)
         } catch (e: Exception) {
-            Log.e("SpeechManager", "Error starting speechRecognizer", e)
-            if (userWantsToRecord) {
+            Log.e(TAG, "Error starting speechRecognizer", e)
+            if (userWantsToRecord && restartAttemptCount < MAX_CONSECUTIVE_RESTARTS) {
+                restartAttemptCount++
                 restartListeningSafely()
+            } else {
+                userWantsToRecord = false
+                onListeningStateChanged(false)
+                cleanupRecognizerOnly()
+                onErrorOccurred("Reconnaissance vocale : impossible de démarrer le service vocal.")
             }
         }
     }
@@ -184,20 +212,19 @@ class SpeechManager(
             try {
                 initAndStartRecognizer()
             } catch (e: Exception) {
-                Log.e("SpeechManager", "Error in restartListeningSafely", e)
+                Log.e(TAG, "Error in restartListeningSafely", e)
             }
-        }, 120L)
+        }, 150L)
     }
 
     /**
-     * ONLY triggered when the user explicitly taps the mic button to finish speaking and send!
+     * Triggered when the user taps the mic button to commit speech and process command/message.
      */
     fun stopListeningAndCommit() {
         mainHandler.post {
             userWantsToRecord = false
             onListeningStateChanged(false)
 
-            // Gather all text from previous chunks + any final partial text
             val inFlight = lastPartialText.trim()
             val totalSpoken = if (inFlight.isNotBlank()) {
                 if (accumulatedText.isBlank()) inFlight else "$accumulatedText $inFlight"
@@ -207,24 +234,23 @@ class SpeechManager(
 
             accumulatedText = ""
             lastPartialText = ""
+            restartAttemptCount = 0
             cleanupRecognizerOnly()
 
             if (totalSpoken.isNotBlank()) {
                 onFinalResult(totalSpoken)
             } else {
-                onErrorOccurred("Je n'ai pas capté de son. Appuie sur le gros micro et parle à Code !")
+                onErrorOccurred("Aucune parole détectée. Réessaie en parlant distinctement !")
             }
         }
     }
 
-    /**
-     * User explicitly cancels the recording (trash/cancel without sending)
-     */
     fun cancelListening() {
         mainHandler.post {
             userWantsToRecord = false
             accumulatedText = ""
             lastPartialText = ""
+            restartAttemptCount = 0
             onListeningStateChanged(false)
             cleanupRecognizerOnly()
         }
@@ -235,7 +261,7 @@ class SpeechManager(
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()
         } catch (e: Exception) {
-            Log.e("SpeechManager", "Error destroying speechRecognizer", e)
+            Log.e(TAG, "Error destroying speechRecognizer", e)
         } finally {
             speechRecognizer = null
         }

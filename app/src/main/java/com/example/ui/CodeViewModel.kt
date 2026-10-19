@@ -19,6 +19,8 @@ import com.example.agent.AgenticHarness
 import com.example.voice.SpeechManager
 import com.example.voice.TtsManager
 import com.example.voice.TtsVoiceInfo
+import com.example.voice.VoiceCommandManager
+import com.example.voice.VoiceCommandResult
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -98,6 +100,12 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isAgenticHarnessDialogVisible = MutableStateFlow(false)
     val isAgenticHarnessDialogVisible: StateFlow<Boolean> = _isAgenticHarnessDialogVisible.asStateFlow()
+
+    private val _isVoiceCommandDialogVisible = MutableStateFlow(false)
+    val isVoiceCommandDialogVisible: StateFlow<Boolean> = _isVoiceCommandDialogVisible.asStateFlow()
+
+    private val _lastVoiceCommandBanner = MutableStateFlow<String?>(null)
+    val lastVoiceCommandBanner: StateFlow<String?> = _lastVoiceCommandBanner.asStateFlow()
 
     private val _isOnline = MutableStateFlow(true)
     val isOnline: StateFlow<Boolean> = _isOnline.asStateFlow()
@@ -194,7 +202,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             },
             onFinalResult = { finalResult ->
                 _liveUserTranscript.value = finalResult
-                processInput(finalResult)
+                processSpokenVoice(finalResult)
             },
             onRmsUpdated = { rms ->
                 _audioRms.value = rms
@@ -955,6 +963,90 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         _isSpeaking.value = false
         _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
         _statusText.value = "Prêt"
+    }
+
+    fun processSpokenVoice(spokenText: String) {
+        val clean = spokenText.trim()
+        if (clean.isBlank()) return
+
+        stopListening()
+        val compName = userProfile.value.companionName.ifBlank { "Code" }
+        val commandResult = VoiceCommandManager.parse(clean, compName)
+
+        when (commandResult) {
+            is VoiceCommandResult.StopSpeaking -> {
+                stopSpeaking()
+                _lastVoiceCommandBanner.value = "Commande : Silence"
+                _statusText.value = "Silence demandé"
+            }
+            is VoiceCommandResult.RepeatReply -> {
+                _lastVoiceCommandBanner.value = "Commande : Répéter"
+                repeatLastReply()
+            }
+            is VoiceCommandResult.ClearHistory -> {
+                _lastVoiceCommandBanner.value = "Commande : Effacer la discussion"
+                clearAllHistory()
+                speak("Conversation réinitialisée.")
+            }
+            is VoiceCommandResult.SearchWeb -> {
+                _lastVoiceCommandBanner.value = "Recherche Web : ${commandResult.query}"
+                triggerWebSearch(commandResult.query)
+            }
+            is VoiceCommandResult.ModeChange -> {
+                _lastVoiceCommandBanner.value = "Mode : ${commandResult.mode.title}"
+                setMode(commandResult.mode)
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.StartQuiz -> {
+                _lastVoiceCommandBanner.value = "Commande : Révision & Quiz"
+                showFlashcardReview()
+                speak("Ouverture de l'atelier de révision et quiz.")
+            }
+            is VoiceCommandResult.CreateFlashcard -> {
+                _lastVoiceCommandBanner.value = "Flashcard : ${commandResult.prompt}"
+                showAddFlashcard(prefilledWord = commandResult.prompt)
+                speak("Préparation de la flashcard pour : ${commandResult.prompt}")
+            }
+            is VoiceCommandResult.OpenVoiceStudio -> {
+                _lastVoiceCommandBanner.value = "Studio des voix"
+                showVoiceStudio()
+                speak("Voici le studio des voix.")
+            }
+            is VoiceCommandResult.OpenAgenticHarness -> {
+                _lastVoiceCommandBanner.value = "Harnais agentique"
+                showAgenticHarnessDialog()
+                speak("Ouverture de la console du harnais agentique.")
+            }
+            is VoiceCommandResult.ToggleContinuousMode -> {
+                _lastVoiceCommandBanner.value = if (commandResult.enable) "Mode continu activé" else "Mode continu désactivé"
+                toggleContinuousMode(commandResult.enable)
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.Help -> {
+                _lastVoiceCommandBanner.value = "Aide vocale"
+                showVoiceCommandHelp()
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.ConversationPrompt -> {
+                processInput(commandResult.prompt)
+            }
+        }
+    }
+
+    fun showVoiceCommandHelp() {
+        _isVoiceCommandDialogVisible.value = true
+    }
+
+    fun hideVoiceCommandHelp() {
+        _isVoiceCommandDialogVisible.value = false
+    }
+
+    fun clearVoiceCommandBanner() {
+        _lastVoiceCommandBanner.value = null
+    }
+
+    fun executeVoiceCommandText(text: String) {
+        processSpokenVoice(text)
     }
 
     fun processInput(text: String) {
