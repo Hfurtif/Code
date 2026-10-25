@@ -18,20 +18,30 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.Calculate
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.filled.VolunteerActivism
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,8 +69,11 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.CachedLesson
 import com.example.data.model.DownloadedKnowledge
 import com.example.ui.CodeViewModel
+import com.example.ui.components.CachedLessonDetailDialog
+import com.example.ui.components.CachedLessonsSection
 import com.example.ui.components.GlassCard
 import com.example.ui.theme.AlertPink
 import com.example.ui.theme.DarkBackground
@@ -84,7 +97,8 @@ data class LearningSubject(
     val icon: ImageVector,
     val accentColor: Color,
     val promptToTrigger: String,
-    val badge: String
+    val badge: String,
+    val category: String = "Général"
 )
 
 @Composable
@@ -94,13 +108,16 @@ fun LessonsScreen(
     modifier: Modifier = Modifier
 ) {
     val knowledgeList by viewModel.allKnowledge.collectAsState()
+    val cachedLessons by viewModel.cachedLessons.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
     val profile by viewModel.userProfile.collectAsState()
     val companionName = profile.companionName.ifBlank { "Code" }
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0: Choisir un sujet, 1: Cours en mémoire hors-ligne
+    var selectedTab by remember { mutableIntStateOf(0) } // 0: Leçons Hors-Ligne, 1: Sujets oraux, 2: Savoirs en mémoire
+    var selectedCategory by remember { mutableStateOf("Tous") }
     var customSubjectInput by remember { mutableStateOf("") }
     var readingCourse by remember { mutableStateOf<DownloadedKnowledge?>(null) }
+    var viewingCachedLesson by remember { mutableStateOf<CachedLesson?>(null) }
 
     val subjects = listOf(
         LearningSubject(
@@ -110,7 +127,18 @@ fun LessonsScreen(
             icon = Icons.Default.Language,
             accentColor = ElectricBlue,
             promptToTrigger = "Apprends-moi l'anglais, s'il te plaît !",
-            badge = "Langue"
+            badge = "Langue",
+            category = "Langue"
+        ),
+        LearningSubject(
+            id = "entrepreneurship",
+            title = "Pôle Entrepreneurs & Commerce",
+            subtitle = "Management, business model, négociation commerciale et pitch de projet avec $companionName.",
+            icon = Icons.Default.TrendingUp,
+            accentColor = NeonCyan,
+            promptToTrigger = "Apprends-moi le commerce et la création d'entreprise !",
+            badge = "Commerce",
+            category = "Pôle Entrepreneurs & Commerce"
         ),
         LearningSubject(
             id = "math",
@@ -119,7 +147,8 @@ fun LessonsScreen(
             icon = Icons.Default.Calculate,
             accentColor = NeonViolet,
             promptToTrigger = "Apprends-moi les maths et la logique !",
-            badge = "Sciences"
+            badge = "Sciences",
+            category = "Sciences"
         ),
         LearningSubject(
             id = "psychology",
@@ -128,7 +157,8 @@ fun LessonsScreen(
             icon = Icons.Default.Psychology,
             accentColor = AlertPink,
             promptToTrigger = "Télécharge un cours sur la psychologie et les biais cognitifs",
-            badge = "Développement"
+            badge = "Développement",
+            category = "Développement"
         ),
         LearningSubject(
             id = "space",
@@ -137,7 +167,8 @@ fun LessonsScreen(
             icon = Icons.Default.Science,
             accentColor = NeonCyan,
             promptToTrigger = "Télécharge un cours sur les trous noirs et l'espace",
-            badge = "Cosmos"
+            badge = "Cosmos",
+            category = "Cosmos"
         ),
         LearningSubject(
             id = "history",
@@ -146,7 +177,8 @@ fun LessonsScreen(
             icon = Icons.Default.Public,
             accentColor = OfflineAmber,
             promptToTrigger = "Télécharge un cours sur l'histoire de Rome et de l'antiquité",
-            badge = "Histoire"
+            badge = "Histoire",
+            category = "Histoire"
         ),
         LearningSubject(
             id = "tech",
@@ -155,43 +187,162 @@ fun LessonsScreen(
             icon = Icons.Default.AutoAwesome,
             accentColor = SuccessGreen,
             promptToTrigger = "Télécharge un cours sur l'intelligence artificielle",
-            badge = "Technologie"
+            badge = "Technologie",
+            category = "Technologie"
+        ),
+        LearningSubject(
+            id = "donations",
+            title = "Pôle Mécénat, Projets & Dons",
+            subtitle = "Financement participatif, dons associatifs, recherche de sponsors et philanthropie.",
+            icon = Icons.Default.VolunteerActivism,
+            accentColor = AlertPink,
+            promptToTrigger = "Explique-moi le fonctionnement des dons et mécénats !",
+            badge = "Dons",
+            category = "Dons"
         )
     )
+
+    val categoryFilterList = listOf(
+        "Tous",
+        "Langue",
+        "Sciences",
+        "Pôle Entrepreneurs & Commerce",
+        "Développement",
+        "Cosmos",
+        "Histoire",
+        "Technologie",
+        "Dons"
+    )
+
+    val displayedSubjects = remember(selectedCategory, subjects) {
+        if (selectedCategory == "Tous") subjects
+        else subjects.filter { it.category == selectedCategory }
+    }
 
     Column(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Header
-        Text(
-            text = "Apprendre avec $companionName",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary
-        )
-        Text(
-            text = "$companionName est ton ami qui sait tout dans l'application Code. Dis-lui ce que tu souhaites apprendre, il se prépare et t'enseigne à l'oral !",
-            fontSize = 12.sp,
-            color = TextSecondary,
-            lineHeight = 17.sp
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Tabs
+        // --- HEADER WITH BRANDING & TOP-RIGHT BADGES (Streak & En ligne) ---
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            val tabs = listOf("🎓 Choisir un sujet", "📚 Cours en mémoire (${knowledgeList.size})")
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Apprendre avec $companionName",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Cours & pôles thématiques oraux avec ton tuteur",
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Badges en haut à droite: Série (Flamme) & Statut En ligne
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.wrapContentWidth()
+            ) {
+                // Badge Série / Streak avec Flamme
+                Surface(
+                    color = OfflineAmber.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = "Série d'apprentissage",
+                            tint = OfflineAmber,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "${profile.streakDays} j",
+                            color = OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Badge Statut de Connexion (En ligne / Hors ligne)
+                Surface(
+                    color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isOnline) SuccessGreen.copy(alpha = 0.6f) else OfflineAmber
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = if (isOnline) SuccessGreen else OfflineAmber,
+                            modifier = Modifier.size(8.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isOnline) "En ligne" else "Hors ligne",
+                            color = if (isOnline) TextPrimary else OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // Tabs Mode
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val tabs = listOf(
+                "💾 Leçons Hors-Ligne (${cachedLessons.size})",
+                "🎓 Sujets oraux",
+                "📚 Savoirs (${knowledgeList.size})"
+            )
             tabs.forEachIndexed { index, tabTitle ->
                 val isSelected = selectedTab == index
                 Surface(
                     modifier = Modifier
-                        .weight(1f)
+                        .wrapContentWidth()
+                        .widthIn(min = 90.dp)
                         .clip(RoundedCornerShape(10.dp))
                         .clickable { selectedTab = index }
                         .testTag("learning_tab_$index"),
@@ -205,19 +356,75 @@ fun LessonsScreen(
                     Text(
                         text = tabTitle,
                         color = if (isSelected) NeonCyan else TextSecondary,
-                        fontSize = 12.sp,
+                        fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                        modifier = Modifier.padding(vertical = 10.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false
                     )
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
+
+        // --- LIGNE D'ONGLETS DE FILTRAGE HORIZONTAUX (Défilante, min-width anti-écrasement pour Sujets) ---
+        if (selectedTab == 1) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                categoryFilterList.forEach { cat ->
+                    val isCatSelected = selectedCategory == cat
+                    Surface(
+                        modifier = Modifier
+                            .wrapContentWidth()
+                            .widthIn(min = 60.dp)
+                            .defaultMinSize(minWidth = 60.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .clickable { selectedCategory = cat },
+                        color = if (isCatSelected) NeonCyan.copy(alpha = 0.25f) else DarkSurfaceVariant,
+                        shape = RoundedCornerShape(14.dp),
+                        border = androidx.compose.foundation.BorderStroke(
+                            1.dp,
+                            if (isCatSelected) NeonCyan else DarkCardBorder
+                        )
+                    ) {
+                        Text(
+                            text = cat,
+                            color = if (isCatSelected) NeonCyan else TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = if (isCatSelected) FontWeight.Bold else FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+        }
 
         when (selectedTab) {
             0 -> {
+                // Room Cached Lessons (English, French & Offline Cache)
+                CachedLessonsSection(
+                    lessons = cachedLessons,
+                    viewModel = viewModel,
+                    onOpenLessonDetail = { viewingCachedLesson = it },
+                    onStartOralLesson = { lesson ->
+                        viewModel.startCachedLesson(lesson)
+                        onNavigateToConversation()
+                    }
+                )
+            }
+
+            1 -> {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
@@ -394,7 +601,7 @@ fun LessonsScreen(
                         )
                     }
 
-                    items(subjects) { subject ->
+                    items(displayedSubjects, key = { it.id }) { subject ->
                         GlassCard(
                             modifier = Modifier.fillMaxWidth(),
                             borderColor = subject.accentColor.copy(alpha = 0.5f)
@@ -405,7 +612,10 @@ fun LessonsScreen(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
                                         Surface(
                                             modifier = Modifier.size(36.dp),
                                             shape = CircleShape,
@@ -422,13 +632,22 @@ fun LessonsScreen(
                                             }
                                         }
                                         Spacer(modifier = Modifier.width(10.dp))
-                                        Column {
+                                        Column(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .fillMaxWidth()
+                                        ) {
                                             Text(
                                                 text = subject.title,
                                                 color = TextPrimary,
                                                 fontSize = 14.sp,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                softWrap = true,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth()
                                             )
+                                            Spacer(modifier = Modifier.height(2.dp))
                                             Surface(
                                                 color = subject.accentColor.copy(alpha = 0.15f),
                                                 shape = RoundedCornerShape(6.dp)
@@ -443,6 +662,8 @@ fun LessonsScreen(
                                             }
                                         }
                                     }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
 
                                     IconButton(
                                         onClick = {
@@ -501,7 +722,7 @@ fun LessonsScreen(
                 }
             }
 
-            1 -> {
+            2 -> {
                 // Downloaded Offline Knowledge in Memory
                 if (knowledgeList.isEmpty()) {
                     Box(
@@ -686,4 +907,19 @@ fun LessonsScreen(
             containerColor = DarkSurfaceVariant
         )
     }
+
+    // Interactive Dialog for Room Cached Lessons
+    viewingCachedLesson?.let { lesson ->
+        CachedLessonDetailDialog(
+            lesson = lesson,
+            viewModel = viewModel,
+            onDismiss = { viewingCachedLesson = null },
+            onStartOralLesson = {
+                viewingCachedLesson = null
+                viewModel.startCachedLesson(it)
+                onNavigateToConversation()
+            }
+        )
+    }
 }
+

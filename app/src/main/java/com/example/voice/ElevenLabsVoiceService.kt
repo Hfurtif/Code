@@ -96,6 +96,8 @@ class ElevenLabsVoiceService(private val context: Context) {
 
     private var mediaPlayer: MediaPlayer? = null
     private var isPlaying = false
+    val isPlayingAudio: Boolean
+        get() = isPlaying
 
     private val cacheDir = File(context.cacheDir, "elevenlabs_audio").apply {
         if (!exists()) mkdirs()

@@ -21,10 +21,16 @@ data class PronunciationExercise(
     val word: String,
     val phonetic: String,
     val translation: String,
-    val tip: String
-)
+    val tip: String,
+    val category: String = "Mots pièges",
+    val syllables: String = ""
+) {
+    val phoneticIpa: String get() = phonetic
+}
 
 object CurriculumRepository {
+    val pronunciationBank: List<com.example.engine.PronunciationExercise> get() = pronunciationDrills
+
 
     val levelQuestions = listOf(
         LevelTestQuestion(
@@ -100,12 +106,23 @@ object CurriculumRepository {
     )
 
     val pronunciationDrills = listOf(
-        PronunciationExercise("Comfortable", "/ˈkʌm.fə.tə.bəl/", "Confortable", "Prononce 'comf-tuh-bul' en 3 syllabes, pas 4."),
-        PronunciationExercise("Thoroughly", "/ˈθʌr.ə.li/", "Minutieusement", "La langue touche les dents du haut pour le son 'TH' doux."),
-        PronunciationExercise("Schedule", "/ˈskedʒ.uːl/", "Emploi du temps", "En américain commence par 'SK', en britannique souvent par 'SH'."),
-        PronunciationExercise("Entrepreneur", "/ˌɒn.trə.prəˈnɜːr/", "Entrepreneur", "Accent tonique sur la dernière syllabe."),
-        PronunciationExercise("Vulnerable", "/ˈvʌl.nər.ə.bəl/", "Vulnérable", "Relâche le son 'ner' au milieu.")
+        PronunciationExercise("Comfortable", "/ˈkʌm.fə.tə.bəl/", "Confortable", "Prononce 'comf-tuh-bul' en 3 syllabes, pas 4.", "Mots pièges", "comf-ter-buhl"),
+        PronunciationExercise("Thoroughly", "/ˈθʌr.ə.li/", "Minutieusement", "La langue touche les dents du haut pour le son 'TH' doux.", "Sons TH & R", "thur-uh-lee"),
+        PronunciationExercise("Schedule", "/ˈskedʒ.uːl/", "Emploi du temps", "En américain commence par 'SK', en britannique souvent par 'SH'.", "Mots pièges", "sked-jool"),
+        PronunciationExercise("Entrepreneur", "/ˌɒn.trə.prəˈnɜːr/", "Entrepreneur", "Accent tonique sur la dernière syllabe.", "Mots pièges", "on-truh-pruh-nur"),
+        PronunciationExercise("Vulnerable", "/ˈvʌl.nər.ə.bəl/", "Vulnérable", "Relâche le son 'ner' au milieu.", "Mots pièges", "vuhl-ner-uh-buhl"),
+        PronunciationExercise("Wednesday", "/ˈwenz.deɪ/", "Mercredi", "Le 'd' et le premier 'e' sont complètement muets.", "Lettres muettes", "wenz-day"),
+        PronunciationExercise("Doubt", "/daʊt/", "Doute", "Le 'b' est silencieux, le mot rime exactement avec 'out'.", "Lettres muettes", "dowt"),
+        PronunciationExercise("Island", "/ˈaɪ.lənd/", "Île", "Le 's' ne se prononce absolument jamais.", "Lettres muettes", "eye-lund"),
+        PronunciationExercise("Muscle", "/ˈmʌs.əl/", "Muscle", "Le 'c' est complètement muet, prononce 'muss-el'.", "Lettres muettes", "muh-sul"),
+        PronunciationExercise("Subtle", "/ˈsʌt.əl/", "Subtil", "Le 'b' est muet, prononce 'sut-tuhl'.", "Lettres muettes", "suh-tuhl"),
+        PronunciationExercise("Squirrel", "/ˈskwɜːr.əl/", "Écureuil", "Enchaîne le 'skw' et le 'r' sans intercaler de son 'i'.", "Sons TH & R", "skwur-uhl"),
+        PronunciationExercise("Breathe", "/briːð/", "Respirer", "Son 'TH' voisé qui vibre contre les cordes vocales.", "Sons TH & R", "breedh"),
+        PronunciationExercise("Specifically", "/spəˈsɪf.ɪ.kli/", "Spécifiquement", "L'accent tonique principal frappe la syllabe 'SIF'.", "Rythme & Accent", "spuh-sif-ik-lee"),
+        PronunciationExercise("Architecture", "/ˈɑːr.kɪ.tek.tʃər/", "Architecture", "Le groupe 'ch' se prononce comme un 'K' dur.", "Rythme & Accent", "ahr-ki-tek-cher"),
+        PronunciationExercise("Recipe", "/ˈres.ə.pi/", "Recette de cuisine", "Le 'e' final se prononce clairement 'i' (trois syllabes).", "Mots pièges", "res-i-pee")
     )
+
 
     val personalGrowthPrompts = listOf(
         "Aujourd'hui, concentrons-nous sur une petite victoire. Quelle est une tâche importante que tu aimerais accomplir aujourd'hui ?",

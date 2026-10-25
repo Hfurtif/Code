@@ -135,7 +135,133 @@ data class DownloadedDocument(
     val sizeMb: Double = 3.2,
     val isAvailableOffline: Boolean = true,
     val sourceUrl: String? = null,
-    val sourceType: String = "document" // "youtube", "tiktok", "web", "document"
+    val sourceType: String = "document", // "youtube", "tiktok", "web", "document"
+    val isSelected: Boolean = true,
+    val notebookTitle: String = "Mon Carnet"
 )
+
+@Entity(tableName = "notebook_notes")
+data class NotebookNote(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val text: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val notebookTitle: String = "Mon Carnet"
+)
+
+@Entity(tableName = "studio_artifacts")
+data class StudioArtifact(
+    @PrimaryKey val id: String, // e.g. "notebookTitle_kind"
+    val kind: String,
+    val title: String,
+    val content: String,
+    val timestamp: Long = System.currentTimeMillis(),
+    val notebookTitle: String = "Mon Carnet"
+)
+
+data class LessonDialogueTurn(
+    val speaker: String,
+    val text: String,
+    val translation: String,
+    val note: String? = null
+)
+
+data class LessonVocabItem(
+    val word: String,
+    val phonetic: String,
+    val translation: String,
+    val example: String
+)
+
+data class LessonQuizItem(
+    val question: String,
+    val options: List<String>,
+    val correctIndex: Int,
+    val explanation: String
+)
+
+@Entity(tableName = "cached_lessons")
+data class CachedLesson(
+    @PrimaryKey val id: String,
+    val languageCode: String, // "en" or "fr"
+    val languageName: String, // "English" or "Français"
+    val title: String,
+    val subtitle: String,
+    val level: String, // "A1", "A2", "B1", "B2", "C1"
+    val category: String, // "Conversation", "Grammaire", "Vocabulaire", "Voyage", "Business", "Prononciation"
+    val durationMinutes: Int = 10,
+    val summary: String,
+    val detailedContent: String,
+    val vocabularyJson: String = "[]",
+    val dialoguesJson: String = "[]",
+    val exerciseQuizJson: String = "[]",
+    val isCachedOffline: Boolean = true,
+    val lastUpdated: Long = System.currentTimeMillis()
+) {
+    fun parseDialogues(): List<LessonDialogueTurn> {
+        val list = mutableListOf<LessonDialogueTurn>()
+        try {
+            val array = org.json.JSONArray(dialoguesJson)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    LessonDialogueTurn(
+                        speaker = obj.optString("speaker", "Tuteur"),
+                        text = obj.optString("text", ""),
+                        translation = obj.optString("translation", ""),
+                        note = if (obj.has("note")) obj.optString("note") else null
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    fun parseVocabulary(): List<LessonVocabItem> {
+        val list = mutableListOf<LessonVocabItem>()
+        try {
+            val array = org.json.JSONArray(vocabularyJson)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                list.add(
+                    LessonVocabItem(
+                        word = obj.optString("word", ""),
+                        phonetic = obj.optString("phonetic", ""),
+                        translation = obj.optString("translation", ""),
+                        example = obj.optString("example", "")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+
+    fun parseQuiz(): List<LessonQuizItem> {
+        val list = mutableListOf<LessonQuizItem>()
+        try {
+            val array = org.json.JSONArray(exerciseQuizJson)
+            for (i in 0 until array.length()) {
+                val obj = array.getJSONObject(i)
+                val optArray = obj.optJSONArray("options")
+                val opts = mutableListOf<String>()
+                if (optArray != null) {
+                    for (j in 0 until optArray.length()) {
+                        opts.add(optArray.getString(j))
+                    }
+                }
+                list.add(
+                    LessonQuizItem(
+                        question = obj.optString("question", ""),
+                        options = opts,
+                        correctIndex = obj.optInt("correctIndex", 0),
+                        explanation = obj.optString("explanation", "")
+                    )
+                )
+            }
+        } catch (_: Exception) {}
+        return list
+    }
+}
+
+
 
 

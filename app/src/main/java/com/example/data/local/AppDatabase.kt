@@ -28,9 +28,12 @@ import kotlinx.coroutines.launch
         ResourcePack::class,
         PendingTask::class,
         DownloadedKnowledge::class,
-        DownloadedDocument::class
+        DownloadedDocument::class,
+        com.example.data.model.NotebookNote::class,
+        com.example.data.model.StudioArtifact::class,
+        com.example.data.model.CachedLesson::class
     ],
-    version = 8,
+    version = 10,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -43,6 +46,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pendingTaskDao(): PendingTaskDao
     abstract fun knowledgeDao(): KnowledgeDao
     abstract fun documentDao(): DocumentDao
+    abstract fun notebookNoteDao(): NotebookNoteDao
+    abstract fun studioArtifactDao(): StudioArtifactDao
+    abstract fun cachedLessonDao(): CachedLessonDao
 
     companion object {
         @Volatile
@@ -284,6 +290,9 @@ abstract class AppDatabase : RoomDatabase() {
                     mode = "FRIEND"
                 )
             )
+
+            // Seed default cached English and French lessons for offline practice
+            database.cachedLessonDao().insertLessons(DefaultCachedLessons.getDefaultLessons())
         }
     }
 }

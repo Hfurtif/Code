@@ -1,13 +1,16 @@
 package com.example
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.speech.RecognizerIntent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.data.model.TutorMode
 import androidx.activity.viewModels
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -79,7 +82,13 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.outlined.School
+import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.material.icons.outlined.TrendingUp
+import com.example.ui.screens.LessonsScreen
+import com.example.ui.screens.ProgressScreen
+import com.example.ui.screens.LevelTestDialog
 import com.example.ui.screens.TeacherOnboardingScreen
 
 sealed class NavTab(
@@ -89,7 +98,9 @@ sealed class NavTab(
     val unselectedIcon: ImageVector
 ) {
     object Conversation : NavTab("conversation", "Discussion", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
+    object Lessons : NavTab("lessons", "Pôles & Cours", Icons.Filled.School, Icons.Outlined.School)
     object Sources : NavTab("sources", "Sources", Icons.Filled.Folder, Icons.Outlined.Folder)
+    object Progress : NavTab("progress", "Progression", Icons.Filled.TrendingUp, Icons.Outlined.TrendingUp)
     object Settings : NavTab("settings", "Réglages", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -124,9 +135,13 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val addFlashcardPrefill by viewModel.addFlashcardPrefill.collectAsState()
     val isUrlLessonDialogVisible by viewModel.isUrlLessonDialogVisible.collectAsState()
     val isVoiceStudioVisible by viewModel.isVoiceStudioVisible.collectAsState()
+    val isAutoSpeakEnabled by viewModel.isAutoSpeakEnabled.collectAsState()
+    val installedTtsEngines by viewModel.installedTtsEngines.collectAsState()
     val isAgenticHarnessDialogVisible by viewModel.isAgenticHarnessDialogVisible.collectAsState()
     val isVoiceCommandDialogVisible by viewModel.isVoiceCommandDialogVisible.collectAsState()
+    val isPronunciationDialogVisible by viewModel.isPronunciationDialogVisible.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
+    var showLevelTestDialog by remember { mutableStateOf(false) }
 
     val shouldShowOnboarding = !userProfile.hasCompletedOnboarding || showOnboardingScreen
 
@@ -149,6 +164,31 @@ fun MainAppContainer(viewModel: CodeViewModel) {
         }
     }
 
+    val systemSpeechLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            val spoken = result.data?.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS)?.firstOrNull()
+            if (!spoken.isNullOrBlank()) {
+                viewModel.processSpokenVoice(spoken)
+            }
+        }
+    }
+
+    val launchSystemSpeech: () -> Unit = {
+        val lang = if (viewModel.selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else userProfile.preferredLanguageCode
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
+            putExtra(RecognizerIntent.EXTRA_PROMPT, "Parle à ton assistant Code...")
+        }
+        try {
+            systemSpeechLauncher.launch(intent)
+        } catch (e: Exception) {
+            viewModel.showVoiceCommandHelp()
+        }
+    }
+
     LaunchedEffect(Unit) {
         if (!hasRecordAudioPermission) {
             permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
@@ -167,7 +207,9 @@ fun MainAppContainer(viewModel: CodeViewModel) {
 
     val tabs = listOf(
         NavTab.Conversation,
+        NavTab.Lessons,
         NavTab.Sources,
+        NavTab.Progress,
         NavTab.Settings
     )
 
@@ -199,9 +241,11 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                         label = {
                             Text(
                                 text = tab.title,
-                                fontSize = 11.sp,
+                                fontSize = 10.sp,
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isSelected) NeonCyan else TextSecondary
+                                color = if (isSelected) NeonCyan else TextSecondary,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         },
                         colors = NavigationBarItemDefaults.colors(
@@ -222,14 +266,29 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 .fillMaxSize()
                 .padding(innerPadding)
         ) {
-            // Screen Switcher (3 Tabs: Conversation, Sources, Réglages)
+            // Screen Switcher
             when (selectedTabIndex) {
-                0 -> ConversationScreen(viewModel = viewModel)
-                1 -> SourcesScreen(
+                0 -> ConversationScreen(
+                    viewModel = viewModel,
+                    hasRecordAudioPermission = hasRecordAudioPermission,
+                    onRequestRecordAudioPermission = {
+                        permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onLaunchSystemSpeech = launchSystemSpeech
+                )
+                1 -> LessonsScreen(
                     viewModel = viewModel,
                     onNavigateToConversation = { selectedTabIndex = 0 }
                 )
-                2 -> SettingsScreen(viewModel = viewModel)
+                2 -> SourcesScreen(
+                    viewModel = viewModel,
+                    onNavigateToConversation = { selectedTabIndex = 0 }
+                )
+                3 -> ProgressScreen(
+                    viewModel = viewModel,
+                    onLaunchLevelTest = { showLevelTestDialog = true }
+                )
+                4 -> SettingsScreen(viewModel = viewModel)
             }
 
             // Info Banner Notification Overlay (if any info/error message)
@@ -336,6 +395,10 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                     currentVoiceId = userProfile.elevenLabsVoiceId,
                     currentSpeechRate = userProfile.speechRate,
                     currentSpeechPitch = userProfile.speechPitch,
+                    installedEngines = installedTtsEngines,
+                    isAutoSpeakEnabled = isAutoSpeakEnabled,
+                    onToggleAutoSpeak = { viewModel.toggleAutoSpeak() },
+                    onSelectEnginePackage = { viewModel.switchTtsEngine(it) },
                     onSaveVoiceConfig = { engine, apiKey, voiceId, rate, pitch ->
                         viewModel.saveVoiceConfig(engine, apiKey, voiceId, rate, pitch)
                     },
@@ -362,6 +425,22 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 VoiceCommandDialog(
                     viewModel = viewModel,
                     onDismiss = { viewModel.hideVoiceCommandHelp() }
+                )
+            }
+
+            // English Pronunciation Guidance Studio Dialog
+            if (isPronunciationDialogVisible) {
+                com.example.ui.screens.PronunciationPracticeDialog(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.hidePronunciationDialog() }
+                )
+            }
+
+            // Level Evaluation Test Dialog
+            if (showLevelTestDialog) {
+                LevelTestDialog(
+                    viewModel = viewModel,
+                    onDismiss = { showLevelTestDialog = false }
                 )
             }
         }

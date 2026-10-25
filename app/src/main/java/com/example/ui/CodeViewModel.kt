@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.local.AppDatabase
+import com.example.data.model.CachedLesson
 import com.example.data.model.ConversationMessage
 import com.example.data.model.LearnedError
 import com.example.data.model.Lesson
@@ -17,8 +18,12 @@ import com.example.ui.components.OrbState
 import com.example.agent.AgenticExecutionState
 import com.example.agent.AgenticHarness
 import com.example.voice.SpeechManager
+import com.example.voice.TtsEngineInfo
 import com.example.voice.TtsManager
 import com.example.voice.TtsVoiceInfo
+import com.example.voice.PronunciationFeedbackResult
+import com.example.engine.CurriculumRepository
+import com.example.engine.PronunciationExercise
 import com.example.voice.VoiceCommandManager
 import com.example.voice.VoiceCommandResult
 import kotlinx.coroutines.Dispatchers
@@ -104,6 +109,25 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _isVoiceCommandDialogVisible = MutableStateFlow(false)
     val isVoiceCommandDialogVisible: StateFlow<Boolean> = _isVoiceCommandDialogVisible.asStateFlow()
 
+    // Pronunciation Studio & English Vocal Guidance
+    private val _isPronunciationDialogVisible = MutableStateFlow(false)
+    val isPronunciationDialogVisible: StateFlow<Boolean> = _isPronunciationDialogVisible.asStateFlow()
+
+    private val _selectedPronunciationExercise = MutableStateFlow<PronunciationExercise?>(null)
+    val selectedPronunciationExercise: StateFlow<PronunciationExercise?> = _selectedPronunciationExercise.asStateFlow()
+
+    private val _pronunciationFeedbackResult = MutableStateFlow<PronunciationFeedbackResult?>(null)
+    val pronunciationFeedbackResult: StateFlow<PronunciationFeedbackResult?> = _pronunciationFeedbackResult.asStateFlow()
+
+    private val _pronunciationExercises = MutableStateFlow(CurriculumRepository.pronunciationDrills)
+    val pronunciationExercises: StateFlow<List<PronunciationExercise>> = _pronunciationExercises.asStateFlow()
+
+    private val _isTestingPronunciationMic = MutableStateFlow(false)
+    val isTestingPronunciationMic: StateFlow<Boolean> = _isTestingPronunciationMic.asStateFlow()
+
+    private val _pronunciationLiveTranscript = MutableStateFlow("")
+    val pronunciationLiveTranscript: StateFlow<String> = _pronunciationLiveTranscript.asStateFlow()
+
     private val _lastVoiceCommandBanner = MutableStateFlow<String?>(null)
     val lastVoiceCommandBanner: StateFlow<String?> = _lastVoiceCommandBanner.asStateFlow()
 
@@ -119,6 +143,18 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isSpeaking = MutableStateFlow(false)
     val isSpeaking: StateFlow<Boolean> = _isSpeaking.asStateFlow()
+
+    private val _isAutoSpeakEnabled = MutableStateFlow(true)
+    val isAutoSpeakEnabled: StateFlow<Boolean> = _isAutoSpeakEnabled.asStateFlow()
+
+    private val _currentlySpokenText = MutableStateFlow<String?>(null)
+    val currentlySpokenText: StateFlow<String?> = _currentlySpokenText.asStateFlow()
+
+    private val _currentSpokenWord = MutableStateFlow<String?>(null)
+    val currentSpokenWord: StateFlow<String?> = _currentSpokenWord.asStateFlow()
+
+    private val _installedTtsEngines = MutableStateFlow<List<TtsEngineInfo>>(emptyList())
+    val installedTtsEngines: StateFlow<List<TtsEngineInfo>> = _installedTtsEngines.asStateFlow()
 
     private val _isHistoryVisible = MutableStateFlow(false)
     val isHistoryVisible: StateFlow<Boolean> = _isHistoryVisible.asStateFlow()
@@ -164,6 +200,15 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     val allKnowledge: StateFlow<List<com.example.data.model.DownloadedKnowledge>> = database.knowledgeDao().getAllKnowledge()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    val cachedLessons: StateFlow<List<CachedLesson>> = brain.repository.allCachedLessonsFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    private val _selectedLessonLanguage = MutableStateFlow("all") // "all", "en", "fr"
+    val selectedLessonLanguage: StateFlow<String> = _selectedLessonLanguage.asStateFlow()
+
+    private val _activeCachedLessonDetail = MutableStateFlow<CachedLesson?>(null)
+    val activeCachedLessonDetail: StateFlow<CachedLesson?> = _activeCachedLessonDetail.asStateFlow()
+
     val allDocuments: StateFlow<List<com.example.data.model.DownloadedDocument>> = brain.repository.allDocumentsFlow
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -174,6 +219,33 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         docs.sumOf { doc -> doc.fullTextContent.split("\\s+".toRegex()).size }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
+    data class CitationExcerpt(
+        val sourceId: Long,
+        val sourceTitle: String,
+        val text: String,
+        val startOffset: Int,
+        val endOffset: Int
+    )
+
+    private val _activeCitationPreview = MutableStateFlow<CitationExcerpt?>(null)
+    val activeCitationPreview: StateFlow<CitationExcerpt?> = _activeCitationPreview.asStateFlow()
+
+    private val _lastRetrievedCitations = MutableStateFlow<List<com.example.engine.CalameAnalysisEngine.SourceChunk>>(emptyList())
+    val lastRetrievedCitations: StateFlow<List<com.example.engine.CalameAnalysisEngine.SourceChunk>> = _lastRetrievedCitations.asStateFlow()
+
+    private val _isGeneratingStudio = MutableStateFlow(false)
+    val isGeneratingStudio: StateFlow<Boolean> = _isGeneratingStudio.asStateFlow()
+
+    private val _currentStudioArtifact = MutableStateFlow<com.example.data.model.StudioArtifact?>(null)
+    val currentStudioArtifact: StateFlow<com.example.data.model.StudioArtifact?> = _currentStudioArtifact.asStateFlow()
+
+    val notebookNotes: StateFlow<List<com.example.data.model.NotebookNote>> = brain.repository.allNotesFlow
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val studioArtifacts: StateFlow<List<com.example.data.model.StudioArtifact>> = brain.repository.getStudioArtifacts("Mon Carnet")
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+
     init {
         // Initial online check
         _isOnline.value = brain.isOnline()
@@ -183,6 +255,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
         // Initial auto-boot download for offline readiness from day one
         viewModelScope.launch {
+            brain.repository.ensureDefaultLessonsSeeded()
             brain.repository.initializeBootPackIfNeeded { progress, step ->
                 if (progress < 1.0f) {
                     _activeLessonPrep.value = "$step (${(progress * 100).toInt()}%)"
@@ -196,13 +269,23 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         speechManager = SpeechManager(
             context = application,
             onPartialResult = { partial ->
-                _liveUserTranscript.value = partial
-                _statusText.value = "Je t'écoute…"
-                _orbState.value = OrbState.LISTENING
+                if (_isTestingPronunciationMic.value) {
+                    _pronunciationLiveTranscript.value = partial
+                } else {
+                    _liveUserTranscript.value = partial
+                    _statusText.value = "Je t'écoute…"
+                    _orbState.value = OrbState.LISTENING
+                }
             },
             onFinalResult = { finalResult ->
-                _liveUserTranscript.value = finalResult
-                processSpokenVoice(finalResult)
+                if (_isTestingPronunciationMic.value) {
+                    _pronunciationLiveTranscript.value = finalResult
+                    _isTestingPronunciationMic.value = false
+                    evaluateUserPronunciation(finalResult, _selectedPronunciationExercise.value)
+                } else {
+                    _liveUserTranscript.value = finalResult
+                    processSpokenVoice(finalResult)
+                }
             },
             onRmsUpdated = { rms ->
                 _audioRms.value = rms
@@ -245,6 +328,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 if (success) {
                     val voices = ttsManager?.getAvailableVoices() ?: emptyList()
                     _availableVoices.value = voices
+                    _installedTtsEngines.value = ttsManager?.getInstalledEngines() ?: emptyList()
                     applyVoicePreferences()
                 }
             },
@@ -254,11 +338,15 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                     _orbState.value = OrbState.SPEAKING
                     _statusText.value = "Je parle…"
                 } else {
+                    _currentlySpokenText.value = null
+                    _currentSpokenWord.value = null
                     _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
                     _statusText.value = "Prêt"
                 }
             },
             onSpeechCompleted = {
+                _currentlySpokenText.value = null
+                _currentSpokenWord.value = null
                 // Continuous conversation mode: auto-rearm microphone
                 viewModelScope.launch {
                     val profile = userProfile.value
@@ -267,6 +355,9 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                         startListening()
                     }
                 }
+            },
+            onWordSpoken = { word, _, _ ->
+                _currentSpokenWord.value = word
             }
         )
 
@@ -316,6 +407,95 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun hideVoiceStudio() {
         _isVoiceStudioVisible.value = false
+    }
+
+    // Pronunciation Studio Actions
+    fun showPronunciationDialog(exercise: PronunciationExercise? = null) {
+        _selectedPronunciationExercise.value = exercise ?: _pronunciationExercises.value.firstOrNull()
+        _pronunciationFeedbackResult.value = null
+        _pronunciationLiveTranscript.value = ""
+        _isTestingPronunciationMic.value = false
+        _isPronunciationDialogVisible.value = true
+    }
+
+    fun hidePronunciationDialog() {
+        if (_isTestingPronunciationMic.value) {
+            speechManager?.stopListening()
+            _isTestingPronunciationMic.value = false
+        }
+        _isPronunciationDialogVisible.value = false
+        _pronunciationFeedbackResult.value = null
+        _pronunciationLiveTranscript.value = ""
+    }
+
+    fun selectPronunciationExercise(exercise: PronunciationExercise) {
+        _selectedPronunciationExercise.value = exercise
+        _pronunciationFeedbackResult.value = null
+        _pronunciationLiveTranscript.value = ""
+    }
+
+    fun speakPronunciationExercise(
+        exercise: PronunciationExercise,
+        slowPace: Boolean = false
+    ) {
+        val accent = userProfile.value.voiceAccent.ifBlank { "en-US" }
+        _currentlySpokenText.value = exercise.word
+        ttsManager?.speakEnglishPronunciationGuide(
+            word = exercise.word,
+            phoneticIpa = exercise.phoneticIpa,
+            syllables = exercise.syllables,
+            slowPace = slowPace,
+            accent = accent
+        )
+    }
+
+    fun speakCustomEnglishWord(
+        word: String,
+        phoneticIpa: String = "",
+        syllables: String = "",
+        slowPace: Boolean = false
+    ) {
+        if (word.isBlank()) return
+        val accent = userProfile.value.voiceAccent.ifBlank { "en-US" }
+        _currentlySpokenText.value = word
+        ttsManager?.speakEnglishPronunciationGuide(
+            word = word.trim(),
+            phoneticIpa = phoneticIpa.trim(),
+            syllables = syllables.trim(),
+            slowPace = slowPace,
+            accent = accent
+        )
+    }
+
+    fun togglePronunciationRecording(targetWord: String) {
+        if (_isTestingPronunciationMic.value) {
+            _isTestingPronunciationMic.value = false
+            speechManager?.stopListening()
+            val spoken = _pronunciationLiveTranscript.value.ifBlank { _liveUserTranscript.value }
+            evaluateUserPronunciation(spoken, _selectedPronunciationExercise.value)
+        } else {
+            _pronunciationFeedbackResult.value = null
+            _pronunciationLiveTranscript.value = ""
+            _isTestingPronunciationMic.value = true
+            speechManager?.startListening("en-US")
+        }
+    }
+
+    fun evaluateUserPronunciation(
+        spokenText: String,
+        exercise: PronunciationExercise? = null
+    ) {
+        val target = exercise ?: _selectedPronunciationExercise.value ?: return
+        val accent = userProfile.value.voiceAccent.ifBlank { "en-US" }
+        val result = ttsManager?.evaluateAndSpeakPronunciationFeedback(
+            targetWord = target.word,
+            userSpoken = spokenText,
+            accent = accent
+        )
+        _pronunciationFeedbackResult.value = result
+        if (result != null) {
+            _currentlySpokenText.value = result.feedbackScript
+        }
     }
 
     fun saveVoiceConfig(engine: String, apiKey: String, voiceId: String, rate: Float, pitch: Float) {
@@ -899,6 +1079,86 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         processInput("Fais-moi le point sur toutes mes sources et ce que tu as appris")
     }
 
+    fun toggleSourceSelection(docId: Long, isSelected: Boolean) {
+        viewModelScope.launch {
+            brain.repository.toggleDocumentSelected(docId, isSelected)
+        }
+    }
+
+    fun toggleAllSources(isSelected: Boolean) {
+        viewModelScope.launch {
+            brain.repository.toggleAllDocuments(isSelected)
+        }
+    }
+
+    fun addNotebookNote(text: String) {
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            brain.repository.addNotebookNote(text)
+            _infoBannerMessage.value = "Note enregistrée dans ton carnet !"
+        }
+    }
+
+    fun deleteNotebookNote(noteId: Long) {
+        viewModelScope.launch {
+            brain.repository.deleteNotebookNote(noteId)
+        }
+    }
+
+    fun generateStudio(kind: com.example.engine.CalameAnalysisEngine.StudioKind) {
+        viewModelScope.launch {
+            _isGeneratingStudio.value = true
+            _infoBannerMessage.value = "Génération de « ${kind.title} » style Calame..."
+            try {
+                val content = brain.repository.generateStudioArtifact(kind)
+                _currentStudioArtifact.value = com.example.data.model.StudioArtifact(
+                    id = "Mon Carnet_${kind.key}",
+                    kind = kind.key,
+                    title = kind.title,
+                    content = content,
+                    notebookTitle = "Mon Carnet"
+                )
+                _infoBannerMessage.value = "« ${kind.title} » généré avec succès !"
+            } catch (e: Exception) {
+                android.util.Log.e("CodeViewModel", "Error generating studio", e)
+                _infoBannerMessage.value = "Erreur lors de la génération."
+            } finally {
+                _isGeneratingStudio.value = false
+            }
+        }
+    }
+
+    fun viewStudioArtifact(artifact: com.example.data.model.StudioArtifact) {
+        _currentStudioArtifact.value = artifact
+    }
+
+    fun closeStudioArtifact() {
+        _currentStudioArtifact.value = null
+    }
+
+    fun openCitation(chunk: com.example.engine.CalameAnalysisEngine.SourceChunk) {
+        _activeCitationPreview.value = CitationExcerpt(
+            sourceId = chunk.sourceId,
+            sourceTitle = chunk.sourceTitle,
+            text = chunk.text,
+            startOffset = chunk.start,
+            endOffset = chunk.end
+        )
+    }
+
+    fun openCitationByIndex(index: Int) {
+        val citations = _lastRetrievedCitations.value
+        val chunk = citations.getOrNull(index)
+        if (chunk != null) {
+            openCitation(chunk)
+        }
+    }
+
+    fun closeCitation() {
+        _activeCitationPreview.value = null
+    }
+
+
     fun showWebSearchDialog() {
         _webSearchDialogVisible.value = true
     }
@@ -961,6 +1221,8 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     fun stopSpeaking() {
         ttsManager?.stop()
         _isSpeaking.value = false
+        _currentlySpokenText.value = null
+        _currentSpokenWord.value = null
         _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
         _statusText.value = "Prêt"
     }
@@ -1022,6 +1284,23 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 toggleContinuousMode(commandResult.enable)
                 speak(commandResult.feedback)
             }
+            is VoiceCommandResult.ToggleAutoSpeech -> {
+                _isAutoSpeakEnabled.value = commandResult.enable
+                _lastVoiceCommandBanner.value = if (commandResult.enable) "Synthèse vocale activée" else "Synthèse vocale en sourdine"
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.AdjustSpeechRate -> {
+                val newRate = (userProfile.value.speechRate + commandResult.delta).coerceIn(0.6f, 1.5f)
+                updateVoiceSettings(
+                    userProfile.value.voiceGender,
+                    userProfile.value.voiceAccent,
+                    newRate,
+                    userProfile.value.speechPitch,
+                    userProfile.value.voiceId
+                )
+                _lastVoiceCommandBanner.value = "Vitesse : ${"%.2f".format(newRate)}x"
+                speak(commandResult.feedback)
+            }
             is VoiceCommandResult.Help -> {
                 _lastVoiceCommandBanner.value = "Aide vocale"
                 showVoiceCommandHelp()
@@ -1075,8 +1354,10 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                         companionName = currentProfile.companionName.ifBlank { "Code" }
                     )
                     _liveCodeReply.value = agenticResult.finalSynthesis
-                    _orbState.value = OrbState.SPEAKING
-                    speak(agenticResult.finalSynthesis)
+                    if (_isAutoSpeakEnabled.value) {
+                        _orbState.value = OrbState.SPEAKING
+                        speak(agenticResult.finalSynthesis)
+                    }
                     database.conversationDao().insertMessage(
                         ConversationMessage(
                             role = "code",
@@ -1143,6 +1424,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             // Update state
             _liveCodeReply.value = response.replyText
             _currentCorrectionNote.value = response.correctionNote
+            _lastRetrievedCitations.value = response.citationChunks
 
             // Check for triggered commands
             when (response.triggeredCommand) {
@@ -1174,8 +1456,34 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                     _storagePromptResource.value = candidate
                     speak(response.replyText)
                 }
-                else -> {
+                "open_pronunciation_studio" -> {
                     speak(response.replyText)
+                    _isPronunciationDialogVisible.value = true
+                }
+                else -> {
+                    if (response.triggeredCommand?.startsWith("pronunciation_guide:") == true) {
+                        val word = response.triggeredCommand.substringAfter("pronunciation_guide:")
+                        val matchingExercise = CurriculumRepository.pronunciationDrills.firstOrNull {
+                            it.word.equals(word, ignoreCase = true)
+                        }
+                        val exercise = matchingExercise ?: PronunciationExercise(
+                            word = word,
+                            phonetic = "/${word.lowercase()}/",
+                            translation = "",
+                            tip = "Écoute bien et répète.",
+                            category = "Mots demandés",
+                            syllables = word
+                        )
+                        _selectedPronunciationExercise.value = exercise
+                        speak(response.replyText)
+                        // Trigger slow syllabic pronunciation afterwards
+                        viewModelScope.launch {
+                            delay(2200)
+                            speakPronunciationExercise(exercise, slowPace = true)
+                        }
+                    } else if (_isAutoSpeakEnabled.value) {
+                        speak(response.replyText)
+                    }
                 }
             }
         }
@@ -1206,7 +1514,34 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun speak(text: String) {
+        _currentlySpokenText.value = text
         ttsManager?.speak(text)
+    }
+
+    fun speakMessage(message: ConversationMessage) {
+        if (_isSpeaking.value && _currentlySpokenText.value == message.text) {
+            stopSpeaking()
+        } else {
+            speak(message.text)
+        }
+    }
+
+    fun toggleAutoSpeak() {
+        _isAutoSpeakEnabled.value = !_isAutoSpeakEnabled.value
+        _infoBannerMessage.value = if (_isAutoSpeakEnabled.value) {
+            "Synthèse vocale automatique activée 🔊"
+        } else {
+            "Synthèse vocale automatique en sourdine 🔇"
+        }
+    }
+
+    fun switchTtsEngine(packageName: String) {
+        ttsManager?.initializeTtsEngine(packageName)
+        _infoBannerMessage.value = "Moteur TTS sélectionné : ${packageName.substringAfterLast('.')}"
+    }
+
+    fun setTtsVolume(volume: Float) {
+        ttsManager?.setVolume(volume)
     }
 
     fun repeatLastReply() {
@@ -1221,6 +1556,65 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         val switchText = "Nous passons en mode ${mode.title}. De quoi as-tu envie de parler ?"
         _liveCodeReply.value = switchText
         speak(switchText)
+    }
+
+    fun setSelectedLessonLanguage(lang: String) {
+        _selectedLessonLanguage.value = lang
+    }
+
+    fun openCachedLessonDetail(lesson: CachedLesson) {
+        _activeCachedLessonDetail.value = lesson
+    }
+
+    fun closeCachedLessonDetail() {
+        _activeCachedLessonDetail.value = null
+    }
+
+    fun toggleLessonOfflineCache(lessonId: String, currentCached: Boolean) {
+        viewModelScope.launch {
+            brain.repository.setLessonOfflineCache(lessonId, !currentCached)
+            _infoBannerMessage.value = if (!currentCached) {
+                "Leçon enregistrée dans la base Room hors-ligne 💾"
+            } else {
+                "Leçon retirée du cache hors-ligne"
+            }
+        }
+    }
+
+    fun speakLessonText(text: String, langCode: String = "en") {
+        val localeCode = if (langCode.startsWith("fr", ignoreCase = true)) "fr-FR" else "en-US"
+        _currentlySpokenText.value = text
+        ttsManager?.speakWithSettings(text, languageOverride = localeCode)
+    }
+
+    fun startCachedLesson(lesson: CachedLesson) {
+        viewModelScope.launch {
+            if (lesson.languageCode.equals("en", ignoreCase = true)) {
+                _selectedMode.value = TutorMode.ENGLISH_TEACHER
+            } else {
+                _selectedMode.value = TutorMode.FRIEND
+            }
+
+            val firstDialogue = lesson.parseDialogues().firstOrNull()
+            val introText = if (lesson.languageCode.equals("en", ignoreCase = true)) {
+                "Welcome to the lesson: '${lesson.title}'! ${firstDialogue?.let { "\nLet's practice! ${it.speaker}: \"${it.text}\"" } ?: lesson.summary}"
+            } else {
+                "Bienvenue dans la leçon : « ${lesson.title} » ! ${firstDialogue?.let { "\nPratiquons ensemble ! ${it.speaker} : « ${it.text} »" } ?: lesson.summary}"
+            }
+
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = introText,
+                    mode = _selectedMode.value.name
+                )
+            )
+
+            _liveCodeReply.value = introText
+            speakLessonText(introText, lesson.languageCode)
+            _statusText.value = "Leçon active : ${lesson.title}"
+            _infoBannerMessage.value = "Leçon hors-ligne démarrée avec Code !"
+        }
     }
 
     fun updateVoiceSettings(

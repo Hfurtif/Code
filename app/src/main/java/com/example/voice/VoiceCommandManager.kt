@@ -18,6 +18,8 @@ sealed class VoiceCommandResult {
     data class StartQuiz(val feedback: String) : VoiceCommandResult()
     data class CreateFlashcard(val prompt: String, val feedback: String) : VoiceCommandResult()
     data class ToggleContinuousMode(val enable: Boolean, val feedback: String) : VoiceCommandResult()
+    data class ToggleAutoSpeech(val enable: Boolean, val feedback: String) : VoiceCommandResult()
+    data class AdjustSpeechRate(val delta: Float, val feedback: String) : VoiceCommandResult()
     data class Help(val feedback: String) : VoiceCommandResult()
     data class ConversationPrompt(val prompt: String) : VoiceCommandResult()
 }
@@ -100,6 +102,18 @@ object VoiceCommandManager {
             title = "Mode conversation continue",
             examples = listOf("\"Active le mode continu\"", "\"Désactive le mode continu\""),
             description = "Le micro se réactive automatiquement après chaque réponse vocale.",
+            category = "Contrôle"
+        ),
+        VoiceCommandHelpItem(
+            title = "Synthèse vocale automatique",
+            examples = listOf("\"Active la voix\"", "\"Coupe la voix\"", "\"Mets en sourdine\""),
+            description = "Active ou coupe la lecture orale automatique des réponses de l'IA.",
+            category = "Contrôle"
+        ),
+        VoiceCommandHelpItem(
+            title = "Vitesse d'élocution TTS",
+            examples = listOf("\"Parle plus vite\"", "\"Parle moins vite\"", "\"Accélère la voix\""),
+            description = "Ajuste la vitesse d'élocution du moteur TextToSpeech Android.",
             category = "Contrôle"
         ),
         VoiceCommandHelpItem(
@@ -274,12 +288,45 @@ object VoiceCommandManager {
             )
         }
 
-        // 14. Help command
+        // 14. Auto-Speech / Voice synthesis toggle
+        if (norm == "active la voix" || norm == "allume la voix" || norm == "parle a voix haute" ||
+            norm == "active la parole" || norm == "unmute" || norm == "enable voice"
+        ) {
+            return VoiceCommandResult.ToggleAutoSpeech(
+                enable = true,
+                feedback = "Synthèse vocale automatique activée. Je lirai mes réponses à voix haute."
+            )
+        }
+        if (norm == "coupe la voix" || norm == "mets en sourdine" || norm == "mute la voix" ||
+            norm == "silence radio" || norm == "ne parle plus" || norm == "desactive la voix" ||
+            norm == "mute" || norm == "disable voice"
+        ) {
+            return VoiceCommandResult.ToggleAutoSpeech(
+                enable = false,
+                feedback = "Synthèse vocale en sourdine. Mes réponses seront affichées sans audio automatique."
+            )
+        }
+
+        // 15. Speech speed adjustment commands
+        if (norm.contains("parle plus vite") || norm.contains("accelere la voix") || norm.contains("speak faster")) {
+            return VoiceCommandResult.AdjustSpeechRate(
+                delta = 0.15f,
+                feedback = "J'accélère un peu mon débit de parole."
+            )
+        }
+        if (norm.contains("parle moins vite") || norm.contains("ralentis la voix") || norm.contains("speak slower")) {
+            return VoiceCommandResult.AdjustSpeechRate(
+                delta = -0.15f,
+                feedback = "Je ralentis mon débit de parole pour plus de clarté."
+            )
+        }
+
+        // 16. Help command
         if (norm == "aide" || norm == "help" || norm.contains("commandes vocales") ||
             norm.contains("quelles sont tes commandes") || norm.contains("que peux tu faire")
         ) {
             return VoiceCommandResult.Help(
-                "Voici les commandes vocales : tu peux dire 'Stop', 'Répète', 'Recherche sur le web...', 'Mode prof d'anglais', 'Lance un quiz', 'Change de voix' ou me poser n'importe quelle question !"
+                "Voici les commandes vocales : tu peux dire 'Stop', 'Répète', 'Active la voix', 'Coupe la voix', 'Parle plus vite', 'Recherche sur le web...', 'Mode prof d'anglais', 'Lance un quiz', 'Change de voix' ou me poser n'importe quelle question !"
             )
         }
 

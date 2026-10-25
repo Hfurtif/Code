@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Calame</title>
+<style>
+:root{--bg:#eef2f1;--pan:#fbfcfb;--ink:#17212b;--mut:#5d6b74;--line:#d3dcdc;--acc:#1f5c73;--hl:#ffd84d;--hlt:#17212b;--soft:#e4ebea;color-scheme:light}
+@media(prefers-color-scheme:dark){:root{--bg:#10161a;--pan:#182026;--ink:#e6edf0;--mut:#93a4ad;--line:#2b3840;--acc:#62b3cf;--hl:#d9b231;--hlt:#10161a;--soft:#212c33;color-scheme:dark}}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 "Segoe UI",system-ui,sans-serif;display:flex;flex-direction:column}
+h2,h3{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-weight:600;margin:0 0 .5rem;letter-spacing:.01em}
+h2{font-size:1.25rem}h3{font-size:1.05rem}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:.35rem .75rem;cursor:pointer}
+button:hover{border-color:var(--acc)}
+button:focus-visible,select:focus-visible,textarea:focus-visible,input:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.pri{background:var(--acc);border-color:var(--acc);color:var(--pan)}
+.sm{padding:.15rem .5rem;font-size:.85rem}
+.btn{display:inline-block;background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:.35rem .75rem;cursor:pointer}
+header{display:flex;gap:.5rem;align-items:center;padding:.6rem 1rem;border-bottom:1px solid var(--line);background:var(--pan);flex-wrap:wrap}
+.brand{font-family:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;font-size:1.45rem;font-weight:700;margin-right:.75rem;background:linear-gradient(transparent 62%,var(--hl) 62%,var(--hl) 92%,transparent 92%);padding:0 .2rem}
+select{background:var(--pan);border:1px solid var(--line);border-radius:6px;padding:.35rem .5rem;max-width:14rem}
+.sp{flex:1}
+#tabs{display:none;border-bottom:1px solid var(--line);background:var(--pan)}
+#tabs button{flex:1;border:0;border-radius:0;border-bottom:3px solid transparent;padding:.6rem}
+#tabs button.on{border-bottom-color:var(--hl);font-weight:600}
+main{flex:1;min-height:0;display:grid;grid-template-columns:290px minmax(0,1fr) 350px}
+section{overflow:auto;padding:1rem;min-height:0}
+#p-src{border-right:1px solid var(--line);background:var(--pan)}
+#p-studio{border-left:1px solid var(--line);background:var(--pan)}
+#p-chat{display:flex;flex-direction:column;padding:0}
+#scroll{flex:1;overflow:auto;padding:1rem 1.25rem}
+.row{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.5rem 0}
+.row.end{justify-content:flex-end}
+.mut{color:var(--mut)}
+small{color:var(--mut)}
+.item{display:flex;gap:.5rem;align-items:center;padding:.4rem .5rem;border-left:3px solid var(--line);margin:.35rem 0;background:var(--bg);border-radius:0 6px 6px 0}
+.item:has(input:checked){border-left-color:var(--hl)}
+.item .lnk{flex:1;text-align:left;border:0;background:none;padding:0;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.item .lnk:hover{text-decoration:underline}
+.x{border:0;background:none;padding:0 .3rem;font-size:1.2rem;color:var(--mut)}
+.over{border-bottom:1px solid var(--line);padding-bottom:1rem;margin-bottom:1rem}
+.over p{max-width:70ch;margin:.25rem 0 .5rem}
+.chips{display:flex;flex-direction:column;gap:.35rem;align-items:flex-start}
+.chips button{text-align:left;background:var(--soft);border-color:transparent}
+.msg{max-width:72ch;margin:.75rem 0;white-space:pre-wrap}
+.msg.u{margin-left:auto;background:var(--acc);color:var(--pan);padding:.5rem .8rem;border-radius:10px 10px 2px 10px;width:fit-content}
+.msg.a{background:var(--pan);border:1px solid var(--line);padding:.7rem .9rem;border-radius:2px 10px 10px 10px}
+.cite{background:var(--hl);color:var(--hlt);border:0;border-radius:3px;padding:0 .35rem;font-size:.8rem;font-weight:600;margin:0 .1rem}
+#comp{display:flex;gap:.5rem;padding:.75rem 1.25rem;border-top:1px solid var(--line);background:var(--pan)}
+#comp textarea{flex:1;resize:none;border:1px solid var(--line);border-radius:6px;padding:.5rem;background:var(--bg)}
+.card{border-top:1px solid var(--line);padding:.75rem 0;white-space:pre-wrap}
+.card h3{white-space:normal}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--pan);color:var(--ink);width:min(680px,92vw);max-height:86vh;padding:1.25rem}
+dialog::backdrop{background:rgba(10,16,20,.55)}
+dialog input[type=text],dialog textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:.5rem;background:var(--bg);margin:.25rem 0 .6rem}
+dialog textarea{min-height:200px}
+dialog pre{white-space:pre-wrap;font:inherit;max-height:55vh;overflow:auto;background:var(--bg);padding:.75rem;border-radius:6px}
+mark{background:var(--hl);color:var(--hlt);padding:.1rem 0}
+#toast{position:fixed;left:50%;bottom:1.2rem;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:.45rem .9rem;border-radius:6px;opacity:0;pointer-events:none;transition:opacity .2s}
+#toast.on{opacity:1}
+@media(max-width:900px){
+ #tabs{display:flex}
+ main{display:block}
+ section{display:none;height:100%;border:0!important}
+ section.on{display:block}
+ #p-chat.on{display:flex}
+}
+@media(prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<header>
+ <span class="brand">Calame</span>
+ <select id="sel" aria-label="Carnet"></select>
+ <button id="bNew">Nouveau carnet</button>
+ <button id="bRen">Renommer</button>
+ <button id="bDel">Supprimer</button>
+ <span class="sp"></span>
+ <button id="bCus">Personnaliser</button>
+ <button id="bExp">Exporter</button>
+ <button id="bCfg">Réglages</button>
+</header>
+<nav id="tabs"><button data-p="src" class="on">Sources</button><button data-p="chat">Discussion</button><button data-p="studio">Atelier</button></nav>
+<main>
+ <section id="p-src" class="on">
+  <h2>Sources</h2>
+  <div class="row"><button id="bPaste" class="pri">Coller du texte</button><label class="btn">Importer des fichiers<input id="file" type="file" multiple accept=".txt,.md,.csv,.json,.html,.htm,text/*" hidden></label></div>
+  <div class="row"><label><input type="checkbox" id="selAll"> Tout sélectionner</label><select id="sort" aria-label="Trier les sources"><option value="">Ordre d’ajout</option><option value="n">Nom</option><option value="t">Taille</option></select></div>
+  <div id="srcs"></div>
+ </section>
+ <section id="p-chat">
+  <div id="scroll"><div id="over"></div><div id="msgs"></div></div>
+  <div id="comp"><textarea id="q" rows="2" placeholder="Posez une question à vos sources"></textarea><button id="bSend" class="pri">Envoyer</button></div>
+ </section>
+ <section id="p-studio">
+  <h2>Atelier</h2>
+  <div class="row" id="gen"></div>
+  <div id="outs"></div>
+  <h2 style="margin-top:1.25rem">Notes</h2>
+  <button id="bNote">Ajouter une note</button>
+  <div id="notes"></div>
+ </section>
+</main>
+<dialog id="dlg"></dialog>
+<div id="toast" role="status"></div>
+<script>
+const $=(s,r=document)=>r.querySelector(s);
+const h=(t,a={},...k)=>{const e=document.createElement(t);for(const[x,v]of Object.entries(a)){if(x==="class")e.className=v;else if(x.startsWith("on"))e.addEventListener(x.slice(2),v);else if(v!==false&&v!=null)e.setAttribute(x,v===true?"":v)}for(const c of k.flat())e.append(c&&c.nodeType?c:document.createTextNode(c==null?"":c));return e};
+const uid=()=>Math.random().toString(36).slice(2,9);
+const KEY="calame.v1";
+let S;
+const newBook=t=>({id:uid(),title:t,sources:[],notes:[],chat:[],studio:{}});
+function load(){try{S=JSON.parse(localStorage.getItem(KEY))}catch(e){S=null}
+ if(!S||!S.books||!S.books.length){const b=newBook("Mon premier carnet");S={books:[b],cur:b.id,cfg:{ai:false,url:"http://localhost:11434",model:""}}}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){toast("Enregistrement impossible : stockage du navigateur indisponible.")}}
+const book=()=>S.books.find(b=>b.id===S.cur)||S.books[0];
+function toast(t){const e=$("#toast");e.textContent=t;e.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("on"),2600)}
+function copy(t){(navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(()=>toast("Copié"),()=>toast("Copie impossible"))}
+
+/* ---------- Analyse du texte (100 % local) ---------- */
+const norm=s=>s.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"");
+const STOP=new Set("le la les un une des du de et en au aux ce ces cet cette que qui quoi dans pour par sur avec sans est sont etre etait ont avoir fait ainsi comme mais donc car son sa ses leur leurs nous vous ils elles plus tout tous toute etre peut aussi entre sous vers chez dont alors lors faire faut autre autres meme tres bien cela ceci apres avant encore toujours souvent chaque quand comment pourquoi doit doivent peuvent permet permettent faut etes fait faites the and for that with this from are was were have has not but you your can will".split(" "));
+const toks=s=>(norm(s).match(/[a-z0-9]{3,}/g)||[]).filter(w=>!STOP.has(w));
+function chunksOf(b){const out=[];b.sources.forEach(s=>{if(s.on===false)return;let from=0,buf="",start=0;
+ for(const p of s.text.split(/(?<=[.!?…])\s+|\n+/)){const i=s.text.indexOf(p,from);if(i<0||!p.trim())continue;from=i+p.length;if(!buf)start=i;buf=s.text.slice(start,from);
+  if(buf.length>380){out.push({src:s,text:buf,start:start,end:from});buf=""}}
+ if(buf)out.push({src:s,text:buf,start:start,end:from})});return out}
+function retrieve(b,q,n){const qt=new Set(toks(q)),cs=chunksOf(b);if(!qt.size)return[];const df={};
+ cs.forEach(c=>{c.t=toks(c.text);new Set(c.t).forEach(w=>df[w]=(df[w]||0)+1)});
+ cs.forEach(c=>{c.sc=0;const tf={};c.t.forEach(w=>tf[w]=(tf[w]||0)+1);qt.forEach(w=>{if(tf[w])c.sc+=(1+Math.log(tf[w]))*Math.log(1+cs.length/df[w])})});
+ return cs.filter(c=>c.sc>0).sort((x,y)=>y.sc-x.sc).slice(0,n)}
+function keywords(b,n){const f={},d={};b.sources.forEach(s=>{if(s.on===false)return;(s.text.match(/[A-Za-zÀ-ÿ0-9]{4,}/g)||[]).forEach(w=>{const k=norm(w);if(STOP.has(k))return;f[k]=(f[k]||0)+1;if(!d[k])d[k]=w.toLowerCase()})});
+ return Object.entries(f).sort((x,y)=>y[1]-x[1]).slice(0,n).map(e=>d[e[0]])}
+function topSentences(b,n){const kw=new Set(keywords(b,15).map(norm)),all=[];
+ chunksOf(b).forEach(c=>c.text.split(/(?<=[.!?…])\s+/).forEach(s=>{s=s.trim();if(s.length>30)all.push({s:s,sc:toks(s).filter(w=>kw.has(w)).length/Math.sqrt(s.length)})}));
+ return all.sort((x,y)=>y.sc-x.sc).slice(0,n).map(x=>x.s)}
+
+/* ---------- Moteur IA local facultatif (Ollama) ---------- */
+const SYS="Tu es un assistant de recherche. Réponds en français, uniquement à partir des extraits numérotés fournis. Cite les extraits utilisés avec [n]. Si l’information est absente des extraits, dis-le.";
+const P={summary:"Rédige un résumé structuré et fidèle des sources ci-dessous, en français.",guide:"Rédige un guide d’étude en français : notions clés avec définitions, points à retenir, cinq questions de révision.",faq:"Rédige en français une FAQ de six questions et réponses fidèles aux sources.",
+audio:"Rédige le script oral d’un résumé audio de deux minutes, ton chaleureux, sans listes.",
+slides:"Rédige une présentation de six diapositives : pour chacune un titre et trois puces.",
+mindmap:"Construis une carte mentale en texte indenté : thème central, cinq branches, deux ou trois sous-branches chacune.",
+cards:"Crée huit fiches d’apprentissage au format « Question : … / Réponse : … ».",
+quiz:"Crée un quiz de cinq questions à choix multiples (A à D) avec les réponses à la fin.",
+table:"Rédige un tableau de données en texte (colonnes séparées par « | ») : thèmes, définitions, source.",
+report:"Rédige un rapport structuré : introduction, thèmes principaux, points clés, conclusion."};
+const NM={summary:"Résumé",guide:"Guide d’étude",faq:"Questions fréquentes",audio:"Résumé audio",slides:"Présentation",mindmap:"Carte mentale",cards:"Fiches d’apprentissage",quiz:"Quiz",table:"Tableau de données",report:"Rapport"};
+const sysOf=b=>{const c=b.custom||{};return SYS+(c.instr?"\nConsignes de l’utilisateur : "+c.instr:"")+(c.len==="court"?"\nRéponds en trois phrases maximum.":c.len==="long"?"\nRéponds de façon détaillée.":"")};
+const nEx=b=>({court:2,long:5}[(b.custom||{}).len]||3);
+let sortBy="";
+const aiOn=()=>S.cfg.ai&&S.cfg.model;
+async function ask(system,user){const c=S.cfg;const r=await fetch(c.url.replace(/\/$/,"")+"/api/chat",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({model:c.model,stream:false,messages:[{role:"system",content:system},{role:"user",content:user}]})});
+ if(!r.ok)throw new Error("HTTP "+r.status);const d=await r.json();return d.message.content}
+const ctx=ex=>ex.map((c,i)=>"["+(i+1)+"] ("+c.src.title+") "+c.text).join("\n\n");
+const fullText=b=>b.sources.filter(s=>s.on!==false).map(s=>"# "+s.title+"\n"+s.text).join("\n\n").slice(0,12000);
+
+/* ---------- Actions ---------- */
+async function send(q){q=q.trim();if(!q)return;const b=book();b.chat.push({r:"u",t:q});$("#q").value="";render();
+ const ex=retrieve(b,q,5);let t,mode="x";
+ if(!ex.length)t="Aucun passage de vos sources ne correspond à cette question. Reformulez-la ou ajoutez une source.";
+ else if(aiOn()){try{t=await ask(sysOf(b),ctx(ex)+"\n\nQuestion : "+q);mode="ia"}catch(e){t=ex.slice(0,nEx(b)).map((c,i)=>c.text.slice(0,260)+" ["+(i+1)+"]").join("\n\n");toast("Modèle local injoignable : réponse par extraits.")}}
+ else t=ex.slice(0,nEx(b)).map((c,i)=>c.text.slice(0,260)+" ["+(i+1)+"]").join("\n\n");
+ b.chat.push({r:"a",t:t,mode:mode,ex:ex.map(c=>({sid:c.src.id,a:c.start,z:c.end}))});save();render()}
+const best=(b,k)=>{const c=retrieve(b,k,1)[0];if(!c)return"";const ss=c.text.split(/(?<=[.!?…])\s+/),kn=norm(k);return(ss.find(x=>norm(x).includes(kn))||ss[0]).trim()};
+const esc=x=>x.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");
+function extract(b,kind){const kw=keywords(b,10),ts=topSentences(b,6),bul=a=>a.map(x=>"• "+x).join("\n"),on=b.sources.filter(x=>x.on!==false);
+ if(kind==="summary")return bul(ts);
+ if(kind==="guide")return"Notions clés : "+kw.join(", ")+"\n\nÀ retenir :\n"+bul(ts);
+ if(kind==="faq")return kw.slice(0,5).map(k=>"Que disent les sources sur « "+k+" » ?\n"+(best(b,k)||"—")).join("\n\n");
+ if(kind==="audio")return"Voici un résumé de « "+b.title+" ». "+ts.slice(0,4).join(" ");
+ if(kind==="slides")return["Diapositive 1 — "+b.title+"\n• "+kw.slice(0,3).join(", ")].concat(kw.slice(0,5).map((k,i)=>"Diapositive "+(i+2)+" — "+k+"\n• "+(best(b,k)||"—"))).join("\n\n");
+ if(kind==="mindmap")return"◆ "+b.title+"\n"+kw.slice(0,6).map((k,i,a)=>{const l=i<a.length-1;return(l?"├ ":"└ ")+k+"\n"+(l?"│  ":"   ")+"└ "+(best(b,k)||"—").slice(0,110)}).join("\n");
+ if(kind==="cards")return kw.slice(0,8).map((k,i)=>"Fiche "+(i+1)+"\nQuestion : Que faut-il retenir de « "+k+" » ?\nRéponse : "+(best(b,k)||"—")).join("\n\n");
+ if(kind==="quiz"){const qs=[],used=new Set();
+  kw.forEach(k=>{if(qs.length>=5)return;const t=best(b,k),re=new RegExp(esc(k),"i");if(!t||used.has(t)||!re.test(t))return;used.add(t);
+   const o=kw.filter(x=>x!==k).sort(()=>Math.random()-.5).slice(0,3).concat(k).sort(()=>Math.random()-.5);qs.push({q:t.replace(re,"_____"),o:o,a:o.indexOf(k)})});
+  return qs.length?qs.map((x,i)=>(i+1)+". "+x.q+"\n"+x.o.map((o,j)=>"   "+"ABCD"[j]+") "+o).join("\n")).join("\n\n")+"\n\nRéponses : "+qs.map((x,i)=>(i+1)+"-"+"ABCD"[x.a]).join("  "):"Pas assez de matière pour un quiz."}
+ if(kind==="table"){const all=norm(on.map(x=>x.text).join(" "));
+  return"Source | Mots | Mots-clés\n"+on.map(x=>x.title+" | "+(x.text.match(/\S+/g)||[]).length+" | "+keywords({sources:[x]},3).join(", ")).join("\n")+"\n\nMot-clé | Occurrences\n"+kw.map(k=>k+" | "+(all.split(norm(k)).length-1)).join("\n")}
+ if(kind==="report")return"Rapport — "+b.title+"\n\n1. Introduction\n"+ts.slice(0,2).join(" ")+"\n\n2. Thèmes principaux\n"+kw.slice(0,4).map(k=>"• "+k+" : "+(best(b,k)||"—")).join("\n")+"\n\n3. Points clés\n"+bul(ts.slice(2,6))+"\n\n4. Sources\n"+on.map(x=>"• "+x.title).join("\n");
+ return""}
+async function generate(kind){const b=book();if(!b.sources.some(s=>s.on!==false))return toast("Ajoutez d’abord une source.");let t;
+ if(aiOn()){toast("Génération en cours…");try{t=await ask(P[kind],fullText(b))}catch(e){toast("Modèle local injoignable : version par extraits.")}}
+ b.studio[kind]=t||extract(b,kind);save();render()}
+function speak(t){if(!("speechSynthesis" in window))return toast("Lecture vocale indisponible dans ce navigateur.");speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(t);u.lang="fr-FR";speechSynthesis.speak(u)}
+function cusDlg(){const b=book(),c=b.custom||{},x=h("textarea",{placeholder:"Ex. : réponds comme un professeur, avec des exemples concrets"},c.instr||""),l=h("select",{},...[["court","Courtes"],["normal","Normales"],["long","Détaillées"]].map(o=>h("option",{value:o[0],selected:(c.len||"normal")===o[0]},o[1])));
+ modal("Personnaliser le carnet",h("div",{},h("p",{class:"mut"},"Ces consignes s’appliquent aux réponses du modèle local et règlent le nombre d’extraits affichés."),h("p",{},"Consignes"),x,h("p",{},"Longueur des réponses"),l),"Enregistrer",()=>{b.custom={instr:x.value.trim(),len:l.value};save();toast("Carnet personnalisé")})}
+function addNote(t){book().notes.unshift({id:uid(),t:t});save();render();toast("Note enregistrée")}
+function modal(title,body,ok,onok){const d=$("#dlg");d.replaceChildren(h("h3",{},title),body,h("div",{class:"row end"},h("button",{onclick:()=>d.close()},"Fermer"),ok?h("button",{class:"pri",onclick:async()=>{if(await onok()!==false)d.close()}},ok):""));d.showModal()}
+function viewSrc(s,a,z){const pre=h("pre",{});let m=null;
+ if(a!=null){m=h("mark",{},s.text.slice(a,z));pre.append(s.text.slice(0,a),m,s.text.slice(z))}else pre.append(s.text);
+ modal(s.title,pre);if(m)m.scrollIntoView({block:"center"})}
+function pasteDlg(){const t=h("input",{type:"text",placeholder:"Titre de la source",value:"Texte collé"}),x=h("textarea",{placeholder:"Collez le texte ici"});
+ modal("Ajouter un texte",h("div",{},t,x),"Ajouter",()=>{if(!x.value.trim()){toast("Le texte est vide.");return false}book().sources.push({id:uid(),title:t.value.trim()||"Texte collé",text:x.value,on:true});save();render()})}
+function noteDlg(){const x=h("textarea",{placeholder:"Votre note"});modal("Nouvelle note",x,"Enregistrer",()=>{if(!x.value.trim())return false;addNote(x.value)})}
+function cfgDlg(){const c=S.cfg,ai=h("input",{type:"checkbox",checked:!!c.ai}),u=h("input",{type:"text",value:c.url}),m=h("input",{type:"text",value:c.model,placeholder:"ex. llama3.2"});
+ const test=h("button",{onclick:async()=>{try{const r=await fetch(u.value.replace(/\/$/,"")+"/api/tags");const d=await r.json();toast("Connecté : "+(d.models||[]).map(x=>x.name).join(", "))}catch(e){toast("Connexion impossible. Ollama est-il lancé avec OLLAMA_ORIGINS=* ?")}}},"Tester la connexion");
+ modal("Réglages",h("div",{},h("p",{class:"mut"},"Sans modèle, Calame répond avec des extraits de vos sources. Avec Ollama (gratuit, sur votre PC), il rédige des réponses complètes. Lancez Ollama avec la variable OLLAMA_ORIGINS=*."),h("label",{},ai," Utiliser un modèle local"),h("p",{},"Adresse du serveur"),u,h("p",{},"Nom du modèle"),m,test),"Enregistrer",()=>{c.ai=ai.checked;c.url=u.value.trim()||"http://localhost:11434";c.model=m.value.trim();save();render()})}
+
+/* ---------- Affichage ---------- */
+function withCites(m){const out=[];m.t.split(/(\[\d+\])/).forEach(p=>{const k=p.match(/^\[(\d+)\]$/);
+ if(k&&m.ex&&m.ex[k[1]-1])out.push(h("button",{class:"cite",title:"Voir le passage",onclick:()=>{const e=m.ex[k[1]-1],s=book().sources.find(z=>z.id===e.sid);s?viewSrc(s,e.a,e.z):toast("Cette source a été supprimée.")}},k[1]));else out.push(p)});return out}
+function render(){const b=book();
+ $("#sel").replaceChildren(...S.books.map(x=>h("option",{value:x.id,selected:x.id===b.id},x.title)));
+ const list=b.sources.slice();if(sortBy==="n")list.sort((x,y)=>x.title.localeCompare(y.title));if(sortBy==="t")list.sort((x,y)=>y.text.length-x.text.length);
+ $("#selAll").checked=b.sources.length>0&&b.sources.every(s=>s.on!==false);
+ $("#srcs").replaceChildren(...(list.length?list.map(s=>h("div",{class:"item"},
+  h("input",{type:"checkbox",checked:s.on!==false,title:"Inclure dans les réponses",onchange:e=>{s.on=e.target.checked;save();render()}}),
+  h("button",{class:"lnk",onclick:()=>viewSrc(s)},s.title),h("small",{},(Math.round(s.text.length/100)/10)+" k"),
+  h("button",{class:"x",title:"Supprimer la source",onclick:()=>{if(confirm("Supprimer cette source ?")){b.sources=b.sources.filter(z=>z!==s);save();render()}}},"×"))):[h("p",{class:"mut"},"Aucune source pour l’instant. Collez un texte ou importez des fichiers pour commencer.")]));
+ const ov=$("#over");ov.replaceChildren();
+ if(b.sources.some(s=>s.on!==false)){const sum=topSentences(b,3).join(" "),kw=keywords(b,6),qs=[];
+  if(kw[0])qs.push("Que disent les sources sur « "+kw[0]+" » ?");if(kw[2])qs.push("Quel lien existe entre « "+kw[1]+" » et « "+kw[2]+" » ?");if(kw[3])qs.push("Résume ce qui concerne « "+kw[3]+" ».");
+  ov.className="over";ov.append(h("h2",{},b.title),h("p",{},sum),
+   h("div",{class:"row"},h("button",{class:"sm",onclick:()=>addNote(sum)},"Enregistrer en note"),h("button",{class:"sm",onclick:()=>copy(sum)},"Copier"),h("button",{class:"sm",onclick:()=>{b.fb="up";save();toast("Merci pour le retour")}},"Aperçu utile"),h("button",{class:"sm",onclick:()=>{b.fb="down";save();toast("Merci pour le retour")}},"Pas utile")),
+   h("div",{class:"chips"},...qs.map(q=>h("button",{onclick:()=>send(q)},q))))}
+ else{ov.className="";ov.append(h("h2",{},b.title),h("p",{class:"mut"},"Ajoutez une source dans la colonne de gauche : Calame prépare alors un aperçu et des questions à poser."))}
+ $("#msgs").replaceChildren(...b.chat.map(m=>m.r==="u"?h("div",{class:"msg u"},m.t):h("div",{class:"msg a"},withCites(m),h("div",{class:"row"},h("button",{class:"sm",onclick:()=>addNote(m.t)},"Enregistrer en note"),h("button",{class:"sm",onclick:()=>copy(m.t)},"Copier"),h("small",{},m.mode==="ia"?"Rédigé par le modèle local":"Extraits de vos sources")))));
+ $("#scroll").scrollTop=1e9;
+ $("#gen").replaceChildren(...Object.keys(NM).map(k=>h("button",{onclick:()=>generate(k)},NM[k])));
+ const nm=NM;
+ $("#outs").replaceChildren(...Object.keys(b.studio).map(k=>h("div",{class:"card"},h("h3",{},nm[k]),b.studio[k],h("div",{class:"row"},h("button",{class:"sm",onclick:()=>addNote(b.studio[k])},"Enregistrer en note"),h("button",{class:"sm",onclick:()=>copy(b.studio[k])},"Copier"),k==="audio"?h("button",{class:"sm",onclick:()=>speak(b.studio[k])},"Écouter"):"",k==="audio"?h("button",{class:"sm",onclick:()=>speechSynthesis.cancel()},"Arrêter"):"",h("button",{class:"sm",onclick:()=>{delete b.studio[k];save();render()}},"Retirer")))));
+ $("#notes").replaceChildren(...(b.notes.length?b.notes.map(n=>h("div",{class:"card"},n.t,h("div",{class:"row"},h("button",{class:"sm",onclick:()=>copy(n.t)},"Copier"),h("button",{class:"sm",onclick:()=>{b.notes=b.notes.filter(z=>z!==n);save();render()}},"Supprimer")))):[h("p",{class:"mut"},"Vos notes apparaîtront ici.")]))}
+
+/* ---------- Démarrage ---------- */
+load();render();
+$("#sel").onchange=e=>{S.cur=e.target.value;save();render()};
+$("#bNew").onclick=()=>{const t=prompt("Nom du nouveau carnet");if(t&&t.trim()){const b=newBook(t.trim());S.books.push(b);S.cur=b.id;save();render()}};
+$("#bRen").onclick=()=>{const b=book(),t=prompt("Nouveau nom",b.title);if(t&&t.trim()){b.title=t.trim();save();render()}};
+$("#bDel").onclick=()=>{const b=book();if(!confirm("Supprimer le carnet « "+b.title+" » et tout son contenu ?"))return;S.books=S.books.filter(z=>z!==b);if(!S.books.length)S.books.push(newBook("Mon premier carnet"));S.cur=S.books[0].id;save();render()};
+$("#bExp").onclick=()=>{const b=book(),a=h("a",{href:URL.createObjectURL(new Blob([JSON.stringify(b,null,2)],{type:"application/json"})),download:b.title.replace(/[^\w-]+/g,"_")+".json"});document.body.append(a);a.click();a.remove()};
+$("#bCfg").onclick=cfgDlg;$("#bCus").onclick=cusDlg;$("#sort").onchange=e=>{sortBy=e.target.value;render()};$("#selAll").onchange=e=>{book().sources.forEach(x=>x.on=e.target.checked);save();render()};$("#bPaste").onclick=pasteDlg;$("#bNote").onclick=noteDlg;
+$("#bSend").onclick=()=>send($("#q").value);
+$("#q").onkeydown=e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();send($("#q").value)}};
+$("#file").onchange=async e=>{const b=book();for(const f of e.target.files){try{b.sources.push({id:uid(),title:f.name,text:await f.text(),on:true})}catch(x){toast("Lecture impossible : "+f.name)}}e.target.value="";save();render()};
+document.querySelectorAll("#tabs button").forEach(t=>t.onclick=()=>{document.querySelectorAll("#tabs button").forEach(x=>x.classList.toggle("on",x===t));["src","chat","studio"].forEach(p=>$("#p-"+p).classList.toggle("on",p===t.dataset.p))});
+</script>
+</body>
+</html>

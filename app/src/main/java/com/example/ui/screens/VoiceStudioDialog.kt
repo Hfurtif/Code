@@ -67,8 +67,11 @@ import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import com.example.ui.theme.TextSecondary
 import com.example.voice.ElevenLabsVoiceService
+import com.example.voice.TtsEngineInfo
 
 @Composable
 fun VoiceStudioDialog(
@@ -77,6 +80,10 @@ fun VoiceStudioDialog(
     currentVoiceId: String,
     currentSpeechRate: Float,
     currentSpeechPitch: Float,
+    installedEngines: List<TtsEngineInfo> = emptyList(),
+    isAutoSpeakEnabled: Boolean = true,
+    onToggleAutoSpeak: () -> Unit = {},
+    onSelectEnginePackage: (String) -> Unit = {},
     onSaveVoiceConfig: (engine: String, apiKey: String, voiceId: String, rate: Float, pitch: Float) -> Unit,
     onPreviewVoice: (sampleText: String, engine: String, apiKey: String, voiceId: String) -> Unit,
     onDismiss: () -> Unit
@@ -369,7 +376,7 @@ fun VoiceStudioDialog(
                         }
                     }
                 } else {
-                    // Google HD Voice info card
+                    // Google HD Voice info card (Android TextToSpeech API)
                     Surface(
                         color = DarkSurface,
                         shape = RoundedCornerShape(14.dp),
@@ -380,32 +387,67 @@ fun VoiceStudioDialog(
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Security, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Moteur Google HD Actif", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Text("Moteur Android TextToSpeech API (Google HD)", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = "L'application sélectionne automatiquement la meilleure voix neuronale HD disponible sur votre appareil Android. Idéal pour un apprentissage fluide et continu sans limite de données.",
+                                text = "Moteur de synthèse natif Android : gratuit, illimité, ultra-rapide et fonctionnant en ligne comme hors-ligne. Traite les phrases longues par découpage intelligent en continu.",
                                 color = TextSecondary,
                                 fontSize = 11.sp,
                                 lineHeight = 15.sp
                             )
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Button(
-                                onClick = {
-                                    onPreviewVoice(
-                                        "Bonjour ! Je suis ton professeur d'anglais personnel. Je suis prêt pour notre cours !",
-                                        "google_hd",
-                                        "",
-                                        ""
-                                    )
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                                shape = RoundedCornerShape(10.dp),
-                                modifier = Modifier.fillMaxWidth()
+
+                            if (installedEngines.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Moteur système détecté : ${installedEngines.firstOrNull { it.isDefault }?.label ?: installedEngines.first().label}",
+                                    color = NeonCyan,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = DarkSurface, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("Tester la voix Google HD", color = DarkSurface, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                                Button(
+                                    onClick = {
+                                        onPreviewVoice(
+                                            "Bonjour ! Je suis ton compagnon vocal. Je peux lire mes réponses à voix haute de manière fluide et naturelle.",
+                                            "google_hd",
+                                            "",
+                                            ""
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = DarkSurface, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Tester (FR)", color = DarkSurface, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
+
+                                Button(
+                                    onClick = {
+                                        onPreviewVoice(
+                                            "Hello! I am your personal AI tutor. Let's practice English together with natural pronunciation!",
+                                            "google_hd",
+                                            "",
+                                            ""
+                                        )
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = Color.White, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Test (EN)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                }
                             }
                         }
                     }
@@ -413,12 +455,80 @@ fun VoiceStudioDialog(
 
                 Spacer(modifier = Modifier.height(14.dp))
 
-                // Rate & Pitch Sliders
-                Text("Vitesse de parole (${"%.2f".format(speechRate)}x) :", color = TextSecondary, fontSize = 11.sp)
+                // Auto-speak responses switch
+                Surface(
+                    color = DarkSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, DarkCardBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Lecture vocale automatique",
+                                color = TextPrimary,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = "L'assistant prononce chaque réponse à voix haute",
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
+                        Switch(
+                            checked = isAutoSpeakEnabled,
+                            onCheckedChange = { onToggleAutoSpeak() },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = NeonCyan,
+                                uncheckedThumbColor = TextMuted,
+                                uncheckedTrackColor = DarkSurfaceVariant
+                            )
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Rate Sliders with quick chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Vitesse (${"%.2f".format(speechRate)}x) :", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(0.85f to "0.8x", 1.0f to "1.0x", 1.2f to "1.2x").forEach { (presetRate, label) ->
+                            Surface(
+                                color = if (kotlin.math.abs(speechRate - presetRate) < 0.05f) NeonCyan else DarkSurface,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, if (kotlin.math.abs(speechRate - presetRate) < 0.05f) NeonCyan else DarkCardBorder),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { speechRate = presetRate }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    color = if (kotlin.math.abs(speechRate - presetRate) < 0.05f) DarkSurface else TextSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
                 Slider(
                     value = speechRate,
                     onValueChange = { speechRate = it },
-                    valueRange = 0.7f..1.3f,
+                    valueRange = 0.6f..1.5f,
                     colors = SliderDefaults.colors(
                         thumbColor = NeonCyan,
                         activeTrackColor = NeonCyan,
@@ -426,7 +536,34 @@ fun VoiceStudioDialog(
                     )
                 )
 
-                Text("Tonalité (${"%.2f".format(speechPitch)}x) :", color = TextSecondary, fontSize = 11.sp)
+                // Pitch Sliders with quick chips
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Tonalité (${"%.2f".format(speechPitch)}x) :", color = TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        listOf(0.85f to "Grave", 1.0f to "Normale", 1.2f to "Aiguë").forEach { (presetPitch, label) ->
+                            Surface(
+                                color = if (kotlin.math.abs(speechPitch - presetPitch) < 0.05f) NeonViolet else DarkSurface,
+                                shape = RoundedCornerShape(6.dp),
+                                border = BorderStroke(1.dp, if (kotlin.math.abs(speechPitch - presetPitch) < 0.05f) NeonViolet else DarkCardBorder),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .clickable { speechPitch = presetPitch }
+                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = label,
+                                    fontSize = 10.sp,
+                                    color = if (kotlin.math.abs(speechPitch - presetPitch) < 0.05f) Color.White else TextSecondary,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
                 Slider(
                     value = speechPitch,
                     onValueChange = { speechPitch = it },

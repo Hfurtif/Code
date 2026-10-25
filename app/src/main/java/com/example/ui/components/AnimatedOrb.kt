@@ -21,6 +21,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
 import com.example.ui.theme.DarkBackground
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.NeonCyan
@@ -270,6 +280,45 @@ fun AnimatedOrb(
                     )
                 }
             }
+        }
+
+        // Central Animated App Icon Avatar
+        val coreScale = when (state) {
+            OrbState.IDLE -> breatheScale
+            OrbState.LISTENING -> (0.95f + (audioRms * 0.38f)).coerceIn(0.9f, 1.35f)
+            OrbState.THINKING -> 0.95f
+            OrbState.SPEAKING -> 1.05f
+            OrbState.OFFLINE -> breatheScale * 0.92f
+        }
+
+        Box(
+            modifier = Modifier
+                .size(size * 0.52f)
+                .scale(coreScale)
+                .clip(CircleShape)
+                .border(
+                    BorderStroke(
+                        2.5.dp,
+                        Brush.linearGradient(
+                            when (state) {
+                                OrbState.IDLE -> listOf(NeonCyan, NeonMagenta, NeonViolet)
+                                OrbState.LISTENING -> listOf(Color.White, NeonCyan, ElectricBlue)
+                                OrbState.THINKING -> listOf(NeonMagenta, NeonViolet, DarkBackground)
+                                OrbState.SPEAKING -> listOf(Color.White, NeonCyan, NeonMagenta)
+                                OrbState.OFFLINE -> listOf(OfflineAmber, NeonViolet)
+                            }
+                        )
+                    ),
+                    CircleShape
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.ic_app_icon),
+                contentDescription = "Code Companion Avatar",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
         }
     }
 }

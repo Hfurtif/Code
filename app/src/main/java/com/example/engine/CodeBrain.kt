@@ -38,7 +38,9 @@ data class BrainResponse(
     val isWebSearch: Boolean = false,
     val webSearchTopic: String? = null,
     val webSourceUrl: String? = null,
-    val newCompanionName: String? = null
+    val newCompanionName: String? = null,
+    val citationChunks: List<com.example.engine.CalameAnalysisEngine.SourceChunk> = emptyList(),
+    val pronunciationTargetWord: String? = null
 )
 
 class CodeBrain(
@@ -48,6 +50,25 @@ class CodeBrain(
 ) {
     companion object {
         private const val TAG = "CodeBrain"
+
+        fun extractPronunciationTarget(rawText: String): String? {
+            val cleaned = rawText.trim().trimEnd('?', '!', '.', ',')
+            val patterns = listOf(
+                Regex("(?:comment\\s+(?:se\\s+)?prononce|comment\\s+prononcer|comment\\s+on\\s+prononce|prononce[- ]moi|prononce|prononciation\\s+de|la\\s+prononciation\\s+de|comment\\s+dire)\\s+[\"«]?([a-zA-Z'-]+)[\"»]?", RegexOption.IGNORE_CASE),
+                Regex("(?:how\\s+(?:do\\s+you|to)\\s+pronounce|pronounce\\s+(?:the\\s+word)?|pronunciation\\s+of)\\s+[\"«]?([a-zA-Z'-]+)[\"»]?", RegexOption.IGNORE_CASE),
+                Regex("(?:c'est\\s+quoi\\s+la\\s+prononciation\\s+de|dis[- ]moi\\s+comment\\s+dire)\\s+[\"«]?([a-zA-Z'-]+)[\"»]?", RegexOption.IGNORE_CASE)
+            )
+            for (pattern in patterns) {
+                val match = pattern.find(cleaned)
+                if (match != null) {
+                    val candidate = match.groupValues[1].trim().trim('"', '«', '»', '\'')
+                    if (candidate.isNotBlank() && candidate.length in 2..25 && !candidate.startsWith("http")) {
+                        return candidate.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                    }
+                }
+            }
+            return null
+        }
     }
 
     fun isOnline(): Boolean {
@@ -125,6 +146,43 @@ class CodeBrain(
             return@withContext BrainResponse(
                 replyText = "C'est noté ! À partir de maintenant, je m'appelle $renameTarget. Je suis ravi d'être $genderFeedback dans l'application Code !",
                 newCompanionName = renameTarget
+            )
+        }
+
+        // 2c. English Pronunciation Guidance Intent ("comment prononcer...", "how to pronounce...", "prononce...")
+        val targetPronunciationWord = extractPronunciationTarget(trimmed)
+        if (targetPronunciationWord != null) {
+            val matchingExercise = CurriculumRepository.pronunciationDrills.firstOrNull {
+                it.word.equals(targetPronunciationWord, ignoreCase = true)
+            }
+            val ipa = matchingExercise?.phonetic ?: "/${targetPronunciationWord.lowercase()}/"
+            val syllables = matchingExercise?.syllables ?: targetPronunciationWord
+            val tip = matchingExercise?.tip ?: "Écoute bien chaque son et articule clairement."
+            val reply = if (lang.code.startsWith("en")) {
+                "Here is the pronunciation for \"$targetPronunciationWord\": $ipa ($syllables). Tip: $tip. Listen to my vocal guidance and repeat after me!"
+            } else {
+                "Voici comment bien prononcer « $targetPronunciationWord » en anglais : $ipa (découpage : $syllables). Astuce : $tip. Écoute bien mon articulation et répète à voix haute !"
+            }
+            return@withContext BrainResponse(
+                replyText = reply,
+                triggeredCommand = "pronunciation_guide:$targetPronunciationWord",
+                pronunciationTargetWord = targetPronunciationWord
+            )
+        }
+
+        // 2d. General Pronunciation Studio intent
+        if (lower.contains("atelier prononciation") || lower.contains("guide prononciation") ||
+            lower.contains("exercices de prononciation") || lower.contains("travailler ma prononciation") ||
+            lower.contains("pronunciation studio") || lower.contains("pronunciation practice")
+        ) {
+            val reply = if (lang.code.startsWith("en")) {
+                "Opening the English Pronunciation Studio! Listen to tricky words at normal and slow speeds, and practice with instant speech evaluation."
+            } else {
+                "J'ouvre l'Atelier de Prononciation ! Tu peux y écouter les mots pièges de l'anglais à vitesse normale ou ralentie (syllabe par syllabe) et t'entraîner au micro avec un retour vocal instantané."
+            }
+            return@withContext BrainResponse(
+                replyText = reply,
+                triggeredCommand = "open_pronunciation_studio"
             )
         }
 
@@ -275,7 +333,8 @@ class CodeBrain(
                         replyText = apiResponse,
                         correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
                         identifiedError = detectedMistake,
-                        isOfflineMode = false
+                        isOfflineMode = false,
+                        citationChunks = nbSourceContext?.retrievedChunks ?: emptyList()
                     )
                 }
             } catch (e: Exception) {
@@ -283,19 +342,29 @@ class CodeBrain(
             }
         }
 
-        // 10. General Conversational Response (Warm, witty Jarvis-style friend holding a genuine dialogue)
-        val offlineReply = JarvisDialogueEngine.generateFriendlyReply(
-            userText = trimmed,
-            profile = userProfile,
-            recentMessages = recentMessages,
-            sourceMatch = matchingDoc
-        )
+        // 10. General Conversational / Extractive Response (Calame extractive citations or Jarvis dialogue)
+        val isExplicitSourceSearch = preferredDocId != null ||
+                lower.contains("source") || lower.contains("résum") || lower.contains("document") ||
+                lower.contains("qu'est-ce") || lower.contains("que dit") || lower.contains("selon") ||
+                lower.contains("explique") || lower.contains("d'après")
+
+        val offlineReply = if (isExplicitSourceSearch && nbSourceContext != null && nbSourceContext.extractiveSummary.isNotBlank()) {
+            "D'après tes sources mémorisées :\n\n${nbSourceContext.extractiveSummary}"
+        } else {
+            JarvisDialogueEngine.generateFriendlyReply(
+                userText = trimmed,
+                profile = userProfile,
+                recentMessages = recentMessages,
+                sourceMatch = matchingDoc
+            )
+        }
 
         BrainResponse(
             replyText = offlineReply,
             correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
             identifiedError = detectedMistake,
-            isOfflineMode = !isOnline()
+            isOfflineMode = !isOnline(),
+            citationChunks = nbSourceContext?.retrievedChunks ?: emptyList()
         )
     }
 
@@ -547,6 +616,8 @@ class CodeBrain(
         }
         return null
     }
+
+
 
     private suspend fun callGeminiDirect(prompt: String): String {
         val request = GeminiRequest(

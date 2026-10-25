@@ -1,6 +1,7 @@
 package com.example.data.repository
 
 import com.example.data.local.AppDatabase
+import com.example.data.model.CachedLesson
 import com.example.data.model.DownloadedDocument
 import com.example.data.model.DownloadedKnowledge
 import com.example.data.model.PendingTask
@@ -18,6 +19,8 @@ class OfflineKnowledgeRepository(
     val allDocumentsFlow: Flow<List<DownloadedDocument>> = database.documentDao().getAllDocuments()
     val allResourcesFlow: Flow<List<ResourcePack>> = database.resourceDao().getAllResources()
     val pendingTasksFlow: Flow<List<PendingTask>> = database.pendingTaskDao().getUnresolvedTasks()
+    val allCachedLessonsFlow: Flow<List<CachedLesson>> = database.cachedLessonDao().getAllCachedLessons()
+    val offlineAvailableLessonsFlow: Flow<List<CachedLesson>> = database.cachedLessonDao().getOfflineAvailableLessons()
 
     private val stopWords = setOf(
         "parle", "parles", "parlez", "peux", "veut", "veux", "faire", "cours", "info",
@@ -27,14 +30,21 @@ class OfflineKnowledgeRepository(
         "sujet", "savoir", "connais", "connaissances", "about", "what", "tell", "explain", "learn"
     )
 
+    val selectedDocumentsFlow: Flow<List<DownloadedDocument>> = database.documentDao().getSelectedDocuments()
+    val allNotesFlow: Flow<List<com.example.data.model.NotebookNote>> = database.notebookNoteDao().getAllNotes()
+    fun getStudioArtifacts(notebookTitle: String = "Mon Carnet"): Flow<List<com.example.data.model.StudioArtifact>> =
+        database.studioArtifactDao().getArtifactsForNotebook(notebookTitle)
+
     data class NotebookLMSourceContext(
         val matchingDocuments: List<DownloadedDocument>,
-        val formattedContext: String
+        val formattedContext: String,
+        val retrievedChunks: List<com.example.engine.CalameAnalysisEngine.SourceChunk> = emptyList(),
+        val extractiveSummary: String = ""
     )
 
     /**
-     * Builds full NotebookLM grounding context from user's accumulated sources.
-     * Ingests full text content so Code can answer ANY question about the sources.
+     * Builds full NotebookLM grounding context from user's accumulated sources
+     * using Calame's exact 100% local TF-IDF retrieval scoring and chunk extraction.
      */
     suspend fun buildNotebookLMContext(userPrompt: String, preferredDocId: Long? = null): NotebookLMSourceContext? = withContext(Dispatchers.IO) {
         val trimmed = userPrompt.trim()
@@ -47,74 +57,66 @@ class OfflineKnowledgeRepository(
         val pureGreetings = setOf("bonjour", "salut", "coucou", "hello", "hi", "ça va", "comment tu vas")
         if (pureGreetings.contains(lower) && preferredDocId == null) return@withContext null
 
-        val isExplicitSourceInquiry = lower.contains("source") || lower.contains("document") ||
-                lower.contains("lien") || lower.contains("article") || lower.contains("vidéo") ||
-                lower.contains("youtube") || lower.contains("tiktok") || lower.contains("pdf") ||
-                lower.contains("fichier") || lower.contains("notes") || lower.contains("résume") ||
-                lower.contains("synthèse") || lower.contains("d'après") || lower.contains("selon") ||
-                lower.contains("qu'as-tu appris") || lower.contains("que sais-tu") || lower.contains("quiz") ||
-                lower.contains("teste-moi") || lower.contains("questionne-moi")
-
-        val keywords = lower
-            .split(" ", "'", "-", "?", "!", ",", ".", ":", ";", "\"", "(", ")")
-            .map { it.trim() }
-            .filter { it.length >= 3 && !stopWords.contains(it) }
-
-        val scoredDocs = allDocs.map { doc ->
-            var score = 0
-            if (preferredDocId != null && doc.id == preferredDocId) {
-                score += 1000
-            }
-            val docTitleLower = doc.title.lowercase()
-            val docKeywordsLower = doc.keywords.lowercase()
-            val docSummaryLower = doc.summary.lowercase()
-            val docContentLower = doc.fullTextContent.lowercase()
-
-            for (kw in keywords) {
-                if (docTitleLower.contains(kw)) score += 15
-                if (docKeywordsLower.contains(kw)) score += 8
-                if (docSummaryLower.contains(kw)) score += 6
-                if (docContentLower.contains(kw)) score += 3
-            }
-
-            Pair(doc, score)
+        val sourceDocs = allDocs.map {
+            com.example.engine.CalameAnalysisEngine.SourceDoc(
+                id = it.id,
+                title = it.title,
+                text = it.fullTextContent,
+                isSelected = if (preferredDocId != null && it.id == preferredDocId) true else it.isSelected
+            )
         }
 
-        val topMatches = scoredDocs.filter { it.second > 0 }.sortedByDescending { it.second }.map { it.first }
+        // Retrieve relevant chunks with Calame TF-IDF
+        var retrieved = com.example.engine.CalameAnalysisEngine.retrieveChunks(sourceDocs, trimmed, topN = 5)
 
-        val selectedDocs = when {
-            preferredDocId != null -> {
-                val pref = allDocs.find { it.id == preferredDocId }
-                if (pref != null) listOf(pref) + topMatches.filter { it.id != preferredDocId }.take(2)
-                else topMatches.take(3)
+        // If preferredDocId was specified, ensure at least one chunk from that document is included
+        if (preferredDocId != null && retrieved.none { it.sourceId == preferredDocId }) {
+            val prefDoc = sourceDocs.find { it.id == preferredDocId }
+            if (prefDoc != null) {
+                val prefChunks = com.example.engine.CalameAnalysisEngine.createChunks(listOf(prefDoc)).take(2)
+                retrieved = (prefChunks + retrieved).take(5)
             }
-            topMatches.isNotEmpty() -> topMatches.take(3)
-            isExplicitSourceInquiry -> allDocs.take(4)
-            allDocs.size <= 3 && keywords.isNotEmpty() -> allDocs
-            else -> emptyList()
         }
 
-        if (selectedDocs.isEmpty()) return@withContext null
+        // Fallback for general inquiries if no specific query terms matched
+        if (retrieved.isEmpty()) {
+            val isExplicitSourceInquiry = lower.contains("source") || lower.contains("document") ||
+                    lower.contains("lien") || lower.contains("article") || lower.contains("résume") ||
+                    lower.contains("synthèse") || lower.contains("qu'as-tu appris") || lower.contains("que sais-tu")
+
+            if (isExplicitSourceInquiry || allDocs.size <= 3) {
+                retrieved = com.example.engine.CalameAnalysisEngine.createChunks(sourceDocs.filter { it.isSelected }).take(4)
+            }
+        }
+
+        if (retrieved.isEmpty()) return@withContext null
+
+        val matchingDocIds = retrieved.map { it.sourceId }.toSet()
+        val selectedDocs = allDocs.filter { matchingDocIds.contains(it.id) }
+
+        val extractive = retrieved.take(3).mapIndexed { i, c ->
+            "${c.text.take(260)} [${i + 1}]"
+        }.joinToString("\n\n")
 
         val formatted = buildString {
-            appendLine("=== BASE DE CONNAISSANCES DE L'UTILISATEUR (STYLE NOTEBOOKLM) ===")
-            appendLine("Code possède en mémoire les sources suivantes accumulées au jour le jour par l'utilisateur.")
-            appendLine("Tu as une maîtrise TOTALE et ABSOLUE de leur contenu pour répondre à TOUTES les questions :")
-            for ((idx, doc) in selectedDocs.withIndex()) {
-                appendLine("\n--- SOURCE N°${idx + 1} : « ${doc.title} » ---")
-                appendLine("Type : ${doc.topicCategory} | Origine : ${doc.authorOrSource}${if (!doc.sourceUrl.isNullOrBlank()) " (${doc.sourceUrl})" else ""}")
-                appendLine("Résumé clé : ${doc.summary}")
-                appendLine("Points essentiels : ${doc.keywords}")
-                appendLine("CONTENU INTÉGRAL DE LA SOURCE :")
-                appendLine(doc.fullTextContent.take(30000))
+            appendLine("=== CONTEXTE SOURCES LOCALES (STYLE CALAME & NOTEBOOKLM) ===")
+            appendLine("Tu es un assistant de recherche. Réponds en français, uniquement à partir des extraits numérotés fournis ci-dessous.")
+            appendLine("Cite systématiquement les extraits utilisés avec [1], [2], etc. Si l'information est absente des extraits, dis-le clairement.")
+            for ((idx, chunk) in retrieved.withIndex()) {
+                appendLine("\n[${idx + 1}] (« ${chunk.sourceTitle} »)")
+                appendLine(chunk.text)
             }
-            appendLine("\n=== DIRECTIVES NOTEBOOKLM POUR TA RÉPONSE ===")
-            appendLine("1. Réponds avec une précision remarquable à la question de ton ami en t'appuyant sur les faits, chiffres, explications et arguments de la source.")
-            appendLine("2. Tu peux citer la source (« Dans ton document... », « Selon la vidéo... », « D'après l'article... ») et répondre à n'importe quelle question (résumé, détail, explication, quiz).")
-            appendLine("3. Reste toujours complice, vivant, chaleureux et oral (ne lis pas froidement, discute avec intelligence comme deux vrais amis).")
+            appendLine("\n=== DIRECTIVES NOTEBOOKLM ===")
+            appendLine("1. Sois précis, chaleureux et direct.")
+            appendLine("2. Inclus les citations [1], [2] directement après les affirmations qui s'appuient sur chaque extrait.")
         }
 
-        NotebookLMSourceContext(selectedDocs, formatted)
+        NotebookLMSourceContext(
+            matchingDocuments = selectedDocs,
+            formattedContext = formatted,
+            retrievedChunks = retrieved,
+            extractiveSummary = extractive
+        )
     }
 
     suspend fun getTotalWordsAccumulated(): Int = withContext(Dispatchers.IO) {
@@ -262,6 +264,49 @@ class OfflineKnowledgeRepository(
         doc.copy(id = id)
     }
 
+    suspend fun toggleDocumentSelected(id: Long, isSelected: Boolean) = withContext(Dispatchers.IO) {
+        database.documentDao().updateSelected(id, isSelected)
+    }
+
+    suspend fun toggleAllDocuments(isSelected: Boolean) = withContext(Dispatchers.IO) {
+        database.documentDao().updateAllSelected(isSelected)
+    }
+
+    suspend fun addNotebookNote(text: String, notebookTitle: String = "Mon Carnet"): Long = withContext(Dispatchers.IO) {
+        database.notebookNoteDao().insertNote(com.example.data.model.NotebookNote(text = text, notebookTitle = notebookTitle))
+    }
+
+    suspend fun deleteNotebookNote(id: Long) = withContext(Dispatchers.IO) {
+        database.notebookNoteDao().deleteById(id)
+    }
+
+    suspend fun generateStudioArtifact(
+        kind: com.example.engine.CalameAnalysisEngine.StudioKind,
+        notebookTitle: String = "Mon Carnet"
+    ): String = withContext(Dispatchers.IO) {
+        val selectedDocs = database.documentDao().getSelectedDocumentsSync()
+        val sources = selectedDocs.map {
+            com.example.engine.CalameAnalysisEngine.SourceDoc(
+                id = it.id,
+                title = it.title,
+                text = it.fullTextContent,
+                isSelected = it.isSelected
+            )
+        }
+        val content = com.example.engine.CalameAnalysisEngine.generateStudioContent(sources, notebookTitle, kind)
+        val artifactId = "${notebookTitle}_${kind.key}"
+        database.studioArtifactDao().insertArtifact(
+            com.example.data.model.StudioArtifact(
+                id = artifactId,
+                kind = kind.key,
+                title = kind.title,
+                content = content,
+                notebookTitle = notebookTitle
+            )
+        )
+        content
+    }
+
     suspend fun getTotalStorageUsedMb(): Double = withContext(Dispatchers.IO) {
         val knowledgeList = allKnowledgeFlow.firstOrNull() ?: emptyList()
         val docList = allDocumentsFlow.firstOrNull() ?: emptyList()
@@ -295,4 +340,28 @@ class OfflineKnowledgeRepository(
         database.userDao().insertOrUpdate(profile.copy(hasDownloadedInitialPack = true))
         onProgress(1.0f, "Pack hors-ligne installé avec succès ! Ton compagnon est prêt à discuter.")
     }
+
+    fun getLessonsByLanguage(langCode: String): Flow<List<CachedLesson>> {
+        return database.cachedLessonDao().getLessonsByLanguage(langCode)
+    }
+
+    suspend fun cacheLesson(lesson: CachedLesson) = withContext(Dispatchers.IO) {
+        database.cachedLessonDao().insertLesson(lesson)
+    }
+
+    suspend fun setLessonOfflineCache(lessonId: String, isCached: Boolean) = withContext(Dispatchers.IO) {
+        database.cachedLessonDao().updateOfflineStatus(lessonId, isCached)
+    }
+
+    suspend fun getCachedLessonById(id: String): CachedLesson? = withContext(Dispatchers.IO) {
+        database.cachedLessonDao().getLessonById(id)
+    }
+
+    suspend fun ensureDefaultLessonsSeeded() = withContext(Dispatchers.IO) {
+        val count = database.cachedLessonDao().countTotalLessons()
+        if (count == 0) {
+            database.cachedLessonDao().insertLessons(com.example.data.local.DefaultCachedLessons.getDefaultLessons())
+        }
+    }
 }
+

@@ -23,11 +23,13 @@ import androidx.compose.material.icons.automirrored.filled.TrendingUp
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.EmojiEvents
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material.icons.filled.TrendingUp
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -72,6 +74,7 @@ fun ProgressScreen(
     modifier: Modifier = Modifier
 ) {
     val profile by viewModel.userProfile.collectAsState()
+    val isOnline by viewModel.isOnline.collectAsState()
     val errors by viewModel.allErrors.collectAsState()
     val vocabList by viewModel.allVocabulary.collectAsState()
     val lessons by viewModel.allLessons.collectAsState()
@@ -83,20 +86,103 @@ fun ProgressScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Screen Header
-        Text(
-            text = "Ta Progression",
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Bold,
-            color = TextPrimary
-        )
-        Text(
-            text = "${profile.companionName.ifBlank { "Code" }} mémorise chaque apprentissage pour mesurer ton évolution",
-            fontSize = 13.sp,
-            color = TextSecondary
-        )
+        // Screen Header with Top-Right Badges
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Ta Progression",
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${profile.companionName.ifBlank { "Code" }} mémorise ton évolution",
+                    fontSize = 11.sp,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Badges en haut à droite: Streak & Statut En ligne
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Streak Flame Badge
+                Surface(
+                    color = OfflineAmber.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = "Série",
+                            tint = OfflineAmber,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "${profile.streakDays} j",
+                            color = OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Online Badge
+                Surface(
+                    color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isOnline) SuccessGreen.copy(alpha = 0.6f) else OfflineAmber
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = if (isOnline) SuccessGreen else OfflineAmber,
+                            modifier = Modifier.size(8.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isOnline) "En ligne" else "Hors ligne",
+                            color = if (isOnline) SuccessGreen else OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+            }
+        }
 
         Spacer(modifier = Modifier.height(14.dp))
 

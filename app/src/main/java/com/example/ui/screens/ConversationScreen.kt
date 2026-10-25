@@ -38,6 +38,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
@@ -48,6 +49,10 @@ import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Hearing
+import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -107,6 +112,11 @@ import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DarkSurfaceVariant
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.NeonCyan
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.example.R
+import com.example.ui.theme.NeonMagenta
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.OfflineAmber
 import com.example.ui.theme.SuccessGreen
@@ -117,8 +127,19 @@ import com.example.ui.theme.TextSecondary
 @Composable
 fun ConversationScreen(
     viewModel: CodeViewModel,
+    hasRecordAudioPermission: Boolean = true,
+    onRequestRecordAudioPermission: () -> Unit = {},
+    onLaunchSystemSpeech: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val onMicClick: () -> Unit = {
+        if (!hasRecordAudioPermission) {
+            onRequestRecordAudioPermission()
+        } else {
+            viewModel.toggleListening()
+        }
+    }
+
     val orbState by viewModel.orbState.collectAsState()
     val statusText by viewModel.statusText.collectAsState()
     val audioRms by viewModel.audioRms.collectAsState()
@@ -130,6 +151,9 @@ fun ConversationScreen(
     val isListening by viewModel.isListening.collectAsState()
     val recordingDuration by viewModel.recordingDurationSeconds.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
+    val isAutoSpeakEnabled by viewModel.isAutoSpeakEnabled.collectAsState()
+    val currentlySpokenText by viewModel.currentlySpokenText.collectAsState()
+    val currentSpokenWord by viewModel.currentSpokenWord.collectAsState()
     val isHistoryVisible by viewModel.isHistoryVisible.collectAsState()
     val isIngestingSource by viewModel.isIngestingSource.collectAsState()
     val storagePromptResource by viewModel.storagePromptResource.collectAsState()
@@ -187,238 +211,411 @@ fun ConversationScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- TOP BAR: App branding, Network Status & Mode Chips ---
+            // --- TOP BAR: App branding & Top-Right Badges (Streak Flame & Online Status) ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 8.dp),
+                    .padding(top = 4.dp, bottom = 6.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = companionDisplayName.uppercase(),
-                        color = NeonCyan,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 2.sp
-                    )
+                // Companion Avatar & Branding
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f, fill = false)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .clip(CircleShape)
+                            .border(
+                                androidx.compose.foundation.BorderStroke(
+                                    2.dp,
+                                    Brush.linearGradient(listOf(NeonCyan, NeonMagenta, NeonViolet))
+                                ),
+                                CircleShape
+                            )
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_app_icon),
+                            contentDescription = "Icône $companionDisplayName",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    Column {
+                        Text(
+                            text = companionDisplayName.uppercase(),
+                            color = NeonCyan,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.2.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "COMPAGNON VOCAL IA",
+                            color = NeonViolet,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 0.8.sp,
+                            maxLines = 1
+                        )
+                    }
                 }
 
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Flashcards Review Button
+                // Badges en haut à droite: Indicateur de série (Flamme) & Indicateur En ligne
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.wrapContentWidth()
+                ) {
+                    // Badge Série / Streak avec Flamme
                     Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showFlashcardReview() }
-                            .padding(end = 6.dp)
-                            .testTag("top_flashcards_button"),
-                        color = NeonViolet.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                        color = OfflineAmber.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(12.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.5f))
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.BookmarkAdd,
-                                contentDescription = "Flashcards",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(14.dp)
+                                imageVector = Icons.Default.LocalFireDepartment,
+                                contentDescription = "Série de jours",
+                                tint = OfflineAmber,
+                                modifier = Modifier.size(13.dp)
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Spacer(modifier = Modifier.width(3.dp))
                             Text(
-                                text = "Flashcards (${vocabList.size})",
-                                color = TextPrimary,
+                                text = "${userProfile.streakDays} j",
+                                color = OfflineAmber,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
                     }
 
-                    // URL Lesson (YouTube, TikTok, Web) Button
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showUrlLessonDialog() }
-                            .padding(end = 6.dp)
-                            .testTag("top_url_lesson_button"),
-                        color = ElectricBlue.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Link,
-                                contentDescription = "Leçon URL",
-                                tint = ElectricBlue,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Lien URL",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-
-                    // Harnais Agentique Button
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showAgenticHarnessDialog() }
-                            .padding(end = 6.dp)
-                            .testTag("top_agentic_harness_button"),
-                        color = NeonCyan.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Hub,
-                                contentDescription = "Harnais Agentique",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Harnais IA",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-
-                    // Voix Studio Button (Google HD & ElevenLabs)
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showVoiceStudio() }
-                            .padding(end = 6.dp)
-                            .testTag("top_voice_studio_button"),
-                        color = NeonViolet.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.RecordVoiceOver,
-                                contentDescription = "Studio Voix",
-                                tint = NeonViolet,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Voix",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-
-                    // Commandes Vocales Button
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showVoiceCommandHelp() }
-                            .padding(end = 6.dp)
-                            .testTag("top_voice_commands_button"),
-                        color = NeonCyan.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Hearing,
-                                contentDescription = "Commandes Vocales",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Commandes",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-
-                    // Language Switcher Button
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable { viewModel.showLanguageDialog() }
-                            .padding(end = 6.dp)
-                            .testTag("top_language_switcher_button"),
-                        color = DarkSurfaceVariant,
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Language,
-                                contentDescription = "Changer la langue",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Langue",
-                                color = TextPrimary,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-
-                    // Online/Offline Status Pill
+                    // Badge Statut de Connexion (En ligne / Hors ligne)
                     Surface(
                         color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(12.dp),
                         border = androidx.compose.foundation.BorderStroke(
                             1.dp,
-                            if (isOnline) SuccessGreen.copy(alpha = 0.5f) else OfflineAmber
+                            if (isOnline) SuccessGreen.copy(alpha = 0.6f) else OfflineAmber
                         )
                     ) {
                         Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
                         ) {
                             Icon(
                                 imageVector = Icons.Default.FiberManualRecord,
                                 contentDescription = null,
                                 tint = if (isOnline) SuccessGreen else OfflineAmber,
-                                modifier = Modifier.size(10.dp)
+                                modifier = Modifier.size(8.dp)
                             )
-                            Spacer(modifier = Modifier.width(6.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
                                 text = if (isOnline) "En ligne" else "Hors ligne",
                                 color = if (isOnline) TextPrimary else OfflineAmber,
                                 fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1,
+                                softWrap = false
                             )
                         }
+                    }
+                }
+            }
+
+            // --- LIGNE DE BOUTONS D'ACTIONS (Horizontal Scrollable pour empêcher tout écrasement) ---
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(bottom = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Flashcards Review Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showFlashcardReview() }
+                        .testTag("top_flashcards_button"),
+                    color = NeonViolet.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.BookmarkAdd,
+                            contentDescription = "Flashcards",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Flashcards (${vocabList.size})",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // URL Lesson (YouTube, TikTok, Web) Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showUrlLessonDialog() }
+                        .testTag("top_url_lesson_button"),
+                    color = ElectricBlue.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Link,
+                            contentDescription = "Leçon URL",
+                            tint = ElectricBlue,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Lien URL",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Harnais Agentique Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showAgenticHarnessDialog() }
+                        .testTag("top_agentic_harness_button"),
+                    color = NeonCyan.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Hub,
+                            contentDescription = "Harnais Agentique",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Harnais IA",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Voix Studio Button (Google HD & ElevenLabs)
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showVoiceStudio() }
+                        .testTag("top_voice_studio_button"),
+                    color = NeonViolet.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = "Studio Voix",
+                            tint = NeonViolet,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Voix",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Prononciation Guidance Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showPronunciationDialog() }
+                        .testTag("top_pronunciation_guide_button"),
+                    color = NeonMagenta.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonMagenta.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.RecordVoiceOver,
+                            contentDescription = "Prononciation",
+                            tint = NeonMagenta,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Prononciation",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Auto-Speech / TTS Toggle
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.toggleAutoSpeak() }
+                        .testTag("top_auto_speech_toggle_button"),
+                    color = if (isAutoSpeakEnabled) NeonCyan.copy(alpha = 0.2f) else AlertPink.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isAutoSpeakEnabled) NeonCyan.copy(alpha = 0.6f) else AlertPink.copy(alpha = 0.6f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isAutoSpeakEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
+                            contentDescription = if (isAutoSpeakEnabled) "Synthèse vocale activée" else "Synthèse vocale en sourdine",
+                            tint = if (isAutoSpeakEnabled) NeonCyan else AlertPink,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isAutoSpeakEnabled) "TTS Actif" else "TTS Muet",
+                            color = if (isAutoSpeakEnabled) NeonCyan else AlertPink,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Commandes Vocales Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showVoiceCommandHelp() }
+                        .testTag("top_voice_commands_button"),
+                    color = NeonCyan.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Hearing,
+                            contentDescription = "Commandes Vocales",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Commandes",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Language Switcher Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.showLanguageDialog() }
+                        .testTag("top_language_switcher_button"),
+                    color = DarkSurfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Language,
+                            contentDescription = "Changer la langue",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Langue",
+                            color = TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 }
             }
@@ -592,6 +789,9 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val quickIdeas = listOf(
+                    "🗣️ Comment prononcer Comfortable ?",
+                    "🎙️ Guide de prononciation anglaise",
+                    "🐢 Prononce Thoroughly au ralenti",
                     "📚 Interroger mes sources (NotebookLM)",
                     "📁 De quoi parlent mes sources ?",
                     "👋 Salut mon ami ! Comment tu vas ?",
@@ -733,12 +933,79 @@ fun ConversationScreen(
                                                 )
                                             }
 
-                                            if (!isUser) {
+                                            // Calame Passage Citation Chips
+                                            val citationIndices = remember(msg.text) {
+                                                Regex("\\[(\\d+)\\]").findAll(msg.text).mapNotNull { it.groupValues[1].toIntOrNull() }.distinct().toList()
+                                            }
+                                            if (!isUser && citationIndices.isNotEmpty()) {
                                                 Spacer(modifier = Modifier.height(6.dp))
                                                 Row(
-                                                    modifier = Modifier.fillMaxWidth(),
-                                                    horizontalArrangement = Arrangement.End
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
                                                 ) {
+                                                    Text("Citations :", color = TextMuted, fontSize = 10.sp)
+                                                    citationIndices.forEach { citeNum ->
+                                                        Surface(
+                                                            color = NeonCyan.copy(alpha = 0.2f),
+                                                            shape = RoundedCornerShape(6.dp),
+                                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(6.dp))
+                                                                .clickable { viewModel.openCitationByIndex(citeNum - 1) }
+                                                        ) {
+                                                            Text(
+                                                                text = "[$citeNum]",
+                                                                color = NeonCyan,
+                                                                fontSize = 11.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+
+
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.End,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                // Audio Play / TTS Listen button for this message
+                                                val isThisMsgSpeaking = isSpeaking && currentlySpokenText == msg.text
+                                                Surface(
+                                                    color = if (isThisMsgSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurface,
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    border = androidx.compose.foundation.BorderStroke(
+                                                        1.dp,
+                                                        if (isThisMsgSpeaking) AlertPink else NeonViolet.copy(alpha = 0.4f)
+                                                    ),
+                                                    modifier = Modifier
+                                                        .clip(RoundedCornerShape(8.dp))
+                                                        .clickable { viewModel.speakMessage(msg) }
+                                                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                                                        .testTag("tts_message_button_${msg.id}")
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            imageVector = if (isThisMsgSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                                                            contentDescription = if (isThisMsgSpeaking) "Arrêter" else "Écouter la voix",
+                                                            tint = if (isThisMsgSpeaking) AlertPink else NeonViolet,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                        Text(
+                                                            text = if (isThisMsgSpeaking) "Arrêter" else "Écouter",
+                                                            color = if (isThisMsgSpeaking) AlertPink else NeonViolet,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.SemiBold
+                                                        )
+                                                    }
+                                                }
+
+                                                if (!isUser) {
+                                                    Spacer(modifier = Modifier.width(6.dp))
                                                     Surface(
                                                         color = DarkSurface,
                                                         shape = RoundedCornerShape(8.dp),
@@ -852,6 +1119,90 @@ fun ConversationScreen(
                         }
                     }
 
+                    // Dedicated TTS Speaking Visualizer Banner
+                    AnimatedVisibility(
+                        visible = isSpeaking,
+                        enter = fadeIn() + expandVertically(),
+                        exit = fadeOut() + shrinkVertically()
+                    ) {
+                        val ttsTransition = rememberInfiniteTransition(label = "ttsWave")
+                        Surface(
+                            color = DarkSurfaceVariant,
+                            shape = RoundedCornerShape(12.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
+                            modifier = Modifier
+                                .fillMaxWidth(0.92f)
+                                .padding(vertical = 4.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(
+                                    modifier = Modifier.weight(1f),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription = null,
+                                        tint = NeonViolet,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = if (!currentSpokenWord.isNullOrBlank()) "« $currentSpokenWord »" else "$companionDisplayName parle...",
+                                        color = NeonCyan,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+
+                                // Audio equalizer bars animation
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    repeat(5) { barIndex ->
+                                        val barHeight by ttsTransition.animateFloat(
+                                            initialValue = 4f,
+                                            targetValue = 18f,
+                                            animationSpec = infiniteRepeatable(
+                                                animation = tween(durationMillis = 350 + barIndex * 120),
+                                                repeatMode = RepeatMode.Reverse
+                                            ),
+                                            label = "tts_bar_$barIndex"
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .width(3.dp)
+                                                .height(barHeight.dp)
+                                                .clip(RoundedCornerShape(1.5.dp))
+                                                .background(if (barIndex % 2 == 0) NeonCyan else NeonViolet)
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    // Direct stop button
+                                    IconButton(
+                                        onClick = { viewModel.stopSpeaking() },
+                                        modifier = Modifier.size(24.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Close,
+                                            contentDescription = "Arrêter la voix",
+                                            tint = AlertPink,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+
                     // Live Subtitles Display (User Speech & Code Speech)
                     GlassCard(
                         modifier = Modifier
@@ -955,8 +1306,49 @@ fun ConversationScreen(
                                 Spacer(modifier = Modifier.height(10.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
+                                    horizontalArrangement = Arrangement.End,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    // Live reply speak / stop button
+                                    val isReplySpeaking = isSpeaking && (currentlySpokenText == liveReply || currentlySpokenText == null)
+                                    Surface(
+                                        color = if (isReplySpeaking) AlertPink.copy(alpha = 0.2f) else ElectricBlue.copy(alpha = 0.2f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(
+                                            1.dp,
+                                            if (isReplySpeaking) AlertPink.copy(alpha = 0.6f) else ElectricBlue.copy(alpha = 0.6f)
+                                        ),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(10.dp))
+                                            .clickable {
+                                                if (isReplySpeaking) {
+                                                    viewModel.stopSpeaking()
+                                                } else {
+                                                    viewModel.speak(liveReply)
+                                                }
+                                            }
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                            .testTag("tts_live_reply_button")
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                imageVector = if (isReplySpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
+                                                contentDescription = if (isReplySpeaking) "Arrêter la voix" else "Écouter la réponse",
+                                                tint = if (isReplySpeaking) AlertPink else ElectricBlue,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text(
+                                                text = if (isReplySpeaking) "Silence" else "Écouter",
+                                                color = if (isReplySpeaking) AlertPink else ElectricBlue,
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
                                     Surface(
                                         color = DarkSurface,
                                         shape = RoundedCornerShape(10.dp),
@@ -976,7 +1368,7 @@ fun ConversationScreen(
                                             )
                                             Spacer(modifier = Modifier.width(6.dp))
                                             Text(
-                                                text = "Sauvegarder un mot appris",
+                                                text = "Sauvegarder",
                                                 color = NeonCyan,
                                                 fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold
@@ -1178,6 +1570,59 @@ fun ConversationScreen(
                                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
+                                    // System Voice Input Fallback Chip
+                                    item {
+                                        Surface(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { onLaunchSystemSpeech() }
+                                                .testTag("system_speech_dictation_chip"),
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = ElectricBlue.copy(alpha = 0.25f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue)
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Mic,
+                                                    contentDescription = null,
+                                                    tint = Color.White,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = "Dictée système",
+                                                    color = Color.White,
+                                                    fontSize = 10.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    // Voice Commands Help Chip
+                                    item {
+                                        Surface(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .clickable { viewModel.showVoiceCommandHelp() }
+                                                .testTag("show_voice_commands_chip"),
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = NeonViolet.copy(alpha = 0.2f),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                                        ) {
+                                            Text(
+                                                text = "Commandes vocales ?",
+                                                color = NeonViolet,
+                                                fontSize = 10.sp,
+                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    }
+
                                     val quickHints = listOf(
                                         "Mode prof d'anglais",
                                         "Recherche sur internet...",
@@ -1282,7 +1727,7 @@ fun ConversationScreen(
                             modifier = Modifier
                                 .size(96.dp)
                                 .clip(CircleShape)
-                                .clickable { viewModel.toggleListening() }
+                                .clickable { onMicClick() }
                                 .testTag("main_mic_button"),
                             color = if (isListening) AlertPink else ElectricBlue,
                             shape = CircleShape,
@@ -1386,7 +1831,7 @@ fun ConversationScreen(
                         ),
                         trailingIcon = {
                             IconButton(
-                                onClick = { viewModel.toggleListening() },
+                                onClick = { onMicClick() },
                                 modifier = Modifier
                                     .size(36.dp)
                                     .testTag("inline_mic_dictation_button")
@@ -1460,8 +1905,65 @@ fun ConversationScreen(
                 onDismiss = { showAddSourceDialog = false }
             )
         }
+
+        // Calame Citation Excerpt Dialog
+        val activeCitationPreview by viewModel.activeCitationPreview.collectAsState()
+        activeCitationPreview?.let { citation ->
+            AlertDialog(
+                onDismissRequest = { viewModel.closeCitation() },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = citation.sourceTitle,
+                            color = TextPrimary,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = "Passage exact cité (indices ${citation.startOffset}..${citation.endOffset}) :",
+                            color = NeonCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Surface(
+                            color = DarkSurface,
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = citation.text,
+                                color = TextPrimary,
+                                fontSize = 12.sp,
+                                lineHeight = 17.sp,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = { viewModel.closeCitation() },
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                    ) {
+                        Text("Fermer", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                },
+                containerColor = DarkSurfaceVariant
+            )
+        }
     }
 }
+
 
 @Composable
 private fun AddSourceModalDialog(

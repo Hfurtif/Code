@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -23,6 +24,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.LocalFireDepartment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
@@ -40,10 +46,17 @@ import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -54,6 +67,8 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import com.example.engine.CalameAnalysisEngine
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -136,6 +151,14 @@ fun SourcesScreen(
     var docToPreview by remember { mutableStateOf<DownloadedDocument?>(null) }
     var docToDelete by remember { mutableStateOf<DownloadedDocument?>(null) }
 
+    val studioArtifact by viewModel.currentStudioArtifact.collectAsState()
+    val isGeneratingStudio by viewModel.isGeneratingStudio.collectAsState()
+    val notebookNotes by viewModel.notebookNotes.collectAsState()
+    val activeCitationPreview by viewModel.activeCitationPreview.collectAsState()
+
+    var showAddNoteDialog by remember { mutableStateOf(false) }
+    var newNoteInput by remember { mutableStateOf("") }
+
     val usedMb = documents.sumOf { it.sizeMb }
     val maxLimitGb = userProfile.maxStorageLimitGb
     val totalAppLimitMb = maxLimitGb * 1024.0
@@ -152,6 +175,7 @@ fun SourcesScreen(
             "WEB" -> doc.sourceType.equals("web", ignoreCase = true)
             "IMAGE" -> doc.sourceType.equals("image", ignoreCase = true)
             "FOLDER" -> doc.sourceType.equals("folder", ignoreCase = true) || doc.authorOrSource.contains("Dossier")
+            "DONS" -> doc.title.contains("don", ignoreCase = true) || doc.summary.contains("don", ignoreCase = true)
             "DOCUMENT" -> doc.sourceType.equals("document", ignoreCase = true) || doc.sourceType.equals("pdf", ignoreCase = true) || doc.sourceType.isBlank()
             else -> true
         }
@@ -163,9 +187,9 @@ fun SourcesScreen(
         modifier = modifier
             .fillMaxSize()
             .background(DarkBackground)
-            .padding(16.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
-        // Screen Header
+        // Screen Header with Top-Right Badges
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -174,29 +198,89 @@ fun SourcesScreen(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "Sources & Connaissances (Style NotebookLM)",
-                    fontSize = 20.sp,
+                    fontSize = 19.sp,
                     fontWeight = FontWeight.Bold,
-                    color = TextPrimary
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Télécharge l'intégralité de tes liens et documents. Code perfectionne ses connaissances jour après jour et répond à toutes tes questions dessus !",
-                    fontSize = 12.sp,
+                    text = "${documents.size} source(s) actives dans la mémoire de Code",
+                    fontSize = 11.sp,
                     color = TextSecondary,
-                    lineHeight = 16.sp
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Surface(
-                color = NeonCyan.copy(alpha = 0.2f),
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+
+            Spacer(modifier = Modifier.width(8.dp))
+
+            // Badges en haut à droite: Streak & Statut En ligne
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.wrapContentWidth()
             ) {
-                Text(
-                    text = "${documents.size} source(s)",
-                    color = NeonCyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                )
+                // Streak Flame Badge
+                Surface(
+                    color = OfflineAmber.copy(alpha = 0.16f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.5f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocalFireDepartment,
+                            contentDescription = "Série",
+                            tint = OfflineAmber,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(3.dp))
+                        Text(
+                            text = "${userProfile.streakDays} j",
+                            color = OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+                // Online Badge
+                Surface(
+                    color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isOnline) SuccessGreen.copy(alpha = 0.6f) else OfflineAmber
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = if (isOnline) SuccessGreen else OfflineAmber,
+                            modifier = Modifier.size(8.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isOnline) "En ligne" else "Hors ligne",
+                            color = if (isOnline) SuccessGreen else OfflineAmber,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
             }
         }
 
@@ -258,8 +342,9 @@ fun SourcesScreen(
                                 border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder)
                             ) {
                                 Column(modifier = Modifier.padding(8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text(text = "${documents.size}", color = NeonCyan, fontSize = 18.sp, fontWeight = FontWeight.Black)
-                                    Text(text = "Sources actives", color = TextSecondary, fontSize = 10.sp)
+                                    val activeCount = documents.count { it.isSelected }
+                                    Text(text = "$activeCount / ${documents.size}", color = NeonCyan, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                                    Text(text = "Actives / Total", color = TextSecondary, fontSize = 10.sp)
                                 }
                             }
                             Surface(
@@ -333,6 +418,173 @@ fun SourcesScreen(
                     }
                 }
             }
+
+            // Calame 100% Local Atelier Studio Card
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = NeonViolet,
+                    backgroundColor = DarkSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Atelier Studio (100% Local)",
+                                    color = TextPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Surface(
+                                color = NeonViolet.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f))
+                            ) {
+                                Text(
+                                    text = "Style Calame",
+                                    color = NeonViolet,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "Génère instantanément des synthèses, scripts oraux, fiches, quiz et mindmaps à partir de tes sources actives :",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            lineHeight = 15.sp
+                        )
+
+                        if (isGeneratingStudio) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), color = NeonViolet, strokeWidth = 2.dp)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Génération locale en cours…", color = NeonViolet, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Studio generation action chips
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CalameAnalysisEngine.StudioKind.values().forEach { kind ->
+                                Surface(
+                                    color = DarkSurface,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable(enabled = !isGeneratingStudio && documents.any { it.isSelected }) {
+                                            viewModel.generateStudio(kind)
+                                        }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(text = kind.icon, fontSize = 14.sp)
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = kind.title,
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Carnet de Notes Card
+            item {
+                GlassCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    borderColor = ElectricBlue.copy(alpha = 0.5f),
+                    backgroundColor = DarkSurfaceVariant
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.EditNote, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Notes du Carnet (${notebookNotes.size})",
+                                    color = TextPrimary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            TextButton(onClick = { showAddNoteDialog = true }) {
+                                Text("+ Nouvelle note", color = ElectricBlue, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+
+                        if (notebookNotes.isEmpty()) {
+                            Text(
+                                text = "Aucune note pour l'instant. Consigne tes réflexions ou sauvegarde les résultats de l'Atelier Studio !",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                notebookNotes.take(3).forEach { note ->
+                                    Surface(
+                                        color = DarkSurface,
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = note.text,
+                                                color = TextPrimary,
+                                                fontSize = 11.sp,
+                                                modifier = Modifier.weight(1f),
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            IconButton(
+                                                onClick = { viewModel.deleteNotebookNote(note.id) },
+                                                modifier = Modifier.size(24.dp)
+                                            ) {
+                                                Icon(Icons.Default.Delete, contentDescription = "Supprimer", tint = AlertPink.copy(alpha = 0.7f), modifier = Modifier.size(14.dp))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
 
             // Ingestion Card: Add URL or Document
             // Ingestion Card: Import directly from Phone (Documents, Images, Folders) or Links
@@ -743,7 +995,8 @@ fun SourcesScreen(
                             "FOLDER" to "Dossiers 📁",
                             "WEB" to "Sites Web 🌐",
                             "YOUTUBE" to "YouTube 🎥",
-                            "TIKTOK" to "TikTok 📱"
+                            "TIKTOK" to "TikTok 📱",
+                            "DONS" to "Dons 🎁"
                         ).forEach { (catKey, catLabel) ->
                             val isSelected = selectedCategoryFilter == catKey
                             Surface(
@@ -754,19 +1007,63 @@ fun SourcesScreen(
                                     if (isSelected) NeonCyan else DarkCardBorder
                                 ),
                                 modifier = Modifier
+                                    .wrapContentWidth()
+                                    .widthIn(min = 60.dp)
+                                    .defaultMinSize(minWidth = 60.dp)
                                     .clip(RoundedCornerShape(16.dp))
                                     .clickable { selectedCategoryFilter = catKey }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
                                     text = catLabel,
                                     color = if (isSelected) NeonCyan else TextSecondary,
                                     fontSize = 11.sp,
-                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
                         }
                     }
+                }
+            }
+
+            // Selection Summary and Select-All Bar
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val allSelected = documents.isNotEmpty() && documents.all { it.isSelected }
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { viewModel.toggleAllSources(!allSelected) }
+                    ) {
+                        Checkbox(
+                            checked = allSelected,
+                            onCheckedChange = { viewModel.toggleAllSources(it) },
+                            colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (allSelected) "Désélectionner tout" else "Tout sélectionner (${documents.size})",
+                            color = TextSecondary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    Text(
+                        text = "${documents.count { it.isSelected }} source(s) active(s)",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
             }
 
@@ -817,7 +1114,10 @@ fun SourcesScreen(
                             onNavigateToConversation()
                         },
                         onPreview = { docToPreview = doc },
-                        onDelete = { docToDelete = doc }
+                        onDelete = { docToDelete = doc },
+                        onToggleSelected = { isChecked ->
+                            viewModel.toggleSourceSelection(doc.id, isChecked)
+                        }
                     )
                 }
             }
@@ -980,6 +1280,204 @@ fun SourcesScreen(
             containerColor = DarkSurfaceVariant
         )
     }
+
+    // Calame Studio Artifact Result Dialog
+    studioArtifact?.let { artifact ->
+        AlertDialog(
+            onDismissRequest = { viewModel.closeStudioArtifact() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = artifact.title,
+                        color = TextPrimary,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 380.dp)
+                ) {
+                    Surface(
+                        color = DarkSurface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                    ) {
+                        LazyColumn(modifier = Modifier.padding(12.dp)) {
+                            item {
+                                Text(
+                                    text = artifact.content,
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    lineHeight = 18.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    // Audio listen & save row
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { viewModel.speak(artifact.content) },
+                            colors = ButtonDefaults.buttonColors(containerColor = NeonViolet),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Écouter", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        OutlinedButton(
+                            onClick = { viewModel.stopSpeaking() },
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
+                            modifier = Modifier.weight(0.7f)
+                        ) {
+                            Icon(Icons.Default.Stop, contentDescription = null, tint = TextSecondary, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("Stop", fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                viewModel.addNotebookNote(artifact.content)
+                                viewModel.closeStudioArtifact()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue),
+                            modifier = Modifier.weight(1.1f)
+                        ) {
+                            Icon(Icons.Default.EditNote, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Garder en note", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.closeStudioArtifact() },
+                    colors = ButtonDefaults.buttonColors(containerColor = DarkSurface)
+                ) {
+                    Text("Fermer", color = TextSecondary)
+                }
+            },
+            containerColor = DarkSurfaceVariant
+        )
+    }
+
+    // New Note Dialog
+    if (showAddNoteDialog) {
+        AlertDialog(
+            onDismissRequest = { showAddNoteDialog = false },
+            title = { Text("Nouvelle Note de Carnet", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                OutlinedTextField(
+                    value = newNoteInput,
+                    onValueChange = { newNoteInput = it },
+                    placeholder = { Text("Écris ta note, une idée ou un rappel…", color = TextMuted) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    shape = RoundedCornerShape(10.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = ElectricBlue,
+                        unfocusedBorderColor = DarkCardBorder,
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedContainerColor = DarkSurface,
+                        unfocusedContainerColor = DarkSurface
+                    )
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (newNoteInput.isNotBlank()) {
+                            viewModel.addNotebookNote(newNoteInput)
+                            newNoteInput = ""
+                            showAddNoteDialog = false
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = ElectricBlue)
+                ) {
+                    Text("Enregistrer", color = TextPrimary, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showAddNoteDialog = false }) {
+                    Text("Annuler", color = TextSecondary)
+                }
+            },
+            containerColor = DarkSurfaceVariant
+        )
+    }
+
+    // Citation Excerpt Highlight Dialog
+    activeCitationPreview?.let { citation ->
+        AlertDialog(
+            onDismissRequest = { viewModel.closeCitation() },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = citation.sourceTitle,
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Passage exact cité (indices ${citation.startOffset}..${citation.endOffset}) :",
+                        color = NeonCyan,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Surface(
+                        color = DarkSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = citation.text,
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            lineHeight = 17.sp,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.closeCitation() },
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+                ) {
+                    Text("Fermer", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            },
+            containerColor = DarkSurfaceVariant
+        )
+    }
 }
 
 @Composable
@@ -988,7 +1486,8 @@ private fun SourceItemCard(
     onDiscuss: () -> Unit,
     onQuickAsk: (String) -> Unit = {},
     onPreview: () -> Unit,
-    onDelete: () -> Unit
+    onDelete: () -> Unit,
+    onToggleSelected: (Boolean) -> Unit = {}
 ) {
     val dateStr = remember(doc.downloadDate) {
         val sdf = SimpleDateFormat("dd MMM yyyy", Locale.FRENCH)
@@ -1007,40 +1506,49 @@ private fun SourceItemCard(
 
     GlassCard(
         modifier = Modifier.fillMaxWidth(),
-        borderColor = badgeColor.copy(alpha = 0.4f),
-        backgroundColor = DarkSurfaceVariant
+        borderColor = if (doc.isSelected) badgeColor.copy(alpha = 0.6f) else DarkCardBorder,
+        backgroundColor = if (doc.isSelected) DarkSurfaceVariant else DarkSurfaceVariant.copy(alpha = 0.6f)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
-            // Top row: Type badge, Date, Words, and Delete button
+            // Top row: Checkbox, Type badge, Date, Words, and Delete button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Surface(
-                    color = badgeColor.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(8.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Checkbox(
+                        checked = doc.isSelected,
+                        onCheckedChange = onToggleSelected,
+                        colors = CheckboxDefaults.colors(checkedColor = NeonCyan)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Surface(
+                        color = badgeColor.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, badgeColor.copy(alpha = 0.5f))
                     ) {
-                        Icon(
-                            imageVector = badgeIcon,
-                            contentDescription = null,
-                            tint = badgeColor,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = badgeText,
-                            color = badgeColor,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = badgeIcon,
+                                contentDescription = null,
+                                tint = badgeColor,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = badgeText,
+                                color = badgeColor,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
+
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(

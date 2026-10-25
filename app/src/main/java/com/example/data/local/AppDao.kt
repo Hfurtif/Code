@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
+import com.example.data.model.CachedLesson
 import com.example.data.model.ConversationMessage
 import com.example.data.model.DownloadedDocument
 import com.example.data.model.DownloadedKnowledge
@@ -172,6 +173,18 @@ interface DocumentDao {
     @Query("SELECT * FROM downloaded_documents WHERE id = :id LIMIT 1")
     suspend fun getDocumentById(id: Long): DownloadedDocument?
 
+    @Query("SELECT * FROM downloaded_documents WHERE isSelected = 1 ORDER BY downloadDate DESC")
+    fun getSelectedDocuments(): Flow<List<DownloadedDocument>>
+
+    @Query("SELECT * FROM downloaded_documents WHERE isSelected = 1 ORDER BY downloadDate DESC")
+    suspend fun getSelectedDocumentsSync(): List<DownloadedDocument>
+
+    @Query("UPDATE downloaded_documents SET isSelected = :isSelected WHERE id = :id")
+    suspend fun updateSelected(id: Long, isSelected: Boolean)
+
+    @Query("UPDATE downloaded_documents SET isSelected = :isSelected")
+    suspend fun updateAllSelected(isSelected: Boolean)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDocument(document: DownloadedDocument): Long
 
@@ -181,5 +194,70 @@ interface DocumentDao {
     @Query("DELETE FROM downloaded_documents WHERE id = :id")
     suspend fun deleteById(id: Long)
 }
+
+@Dao
+interface NotebookNoteDao {
+    @Query("SELECT * FROM notebook_notes ORDER BY timestamp DESC")
+    fun getAllNotes(): Flow<List<com.example.data.model.NotebookNote>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertNote(note: com.example.data.model.NotebookNote): Long
+
+    @Delete
+    suspend fun deleteNote(note: com.example.data.model.NotebookNote)
+
+    @Query("DELETE FROM notebook_notes WHERE id = :id")
+    suspend fun deleteById(id: Long)
+}
+
+@Dao
+interface StudioArtifactDao {
+    @Query("SELECT * FROM studio_artifacts WHERE notebookTitle = :notebookTitle")
+    fun getArtifactsForNotebook(notebookTitle: String): Flow<List<com.example.data.model.StudioArtifact>>
+
+    @Query("SELECT * FROM studio_artifacts WHERE id = :id LIMIT 1")
+    suspend fun getArtifactById(id: String): com.example.data.model.StudioArtifact?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertArtifact(artifact: com.example.data.model.StudioArtifact)
+
+    @Delete
+    suspend fun deleteArtifact(artifact: com.example.data.model.StudioArtifact)
+}
+
+@Dao
+interface CachedLessonDao {
+    @Query("SELECT * FROM cached_lessons ORDER BY level ASC, title ASC")
+    fun getAllCachedLessons(): Flow<List<CachedLesson>>
+
+    @Query("SELECT * FROM cached_lessons WHERE languageCode = :langCode ORDER BY level ASC, title ASC")
+    fun getLessonsByLanguage(langCode: String): Flow<List<CachedLesson>>
+
+    @Query("SELECT * FROM cached_lessons WHERE id = :id LIMIT 1")
+    suspend fun getLessonById(id: String): CachedLesson?
+
+    @Query("SELECT * FROM cached_lessons WHERE isCachedOffline = 1 ORDER BY level ASC, title ASC")
+    fun getOfflineAvailableLessons(): Flow<List<CachedLesson>>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLesson(lesson: CachedLesson)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertLessons(lessons: List<CachedLesson>)
+
+    @Query("UPDATE cached_lessons SET isCachedOffline = :isCached WHERE id = :id")
+    suspend fun updateOfflineStatus(id: String, isCached: Boolean)
+
+    @Query("DELETE FROM cached_lessons WHERE id = :id")
+    suspend fun deleteLessonById(id: String)
+
+    @Query("SELECT COUNT(*) FROM cached_lessons WHERE languageCode = :langCode")
+    suspend fun countLessonsByLanguage(langCode: String): Int
+
+    @Query("SELECT COUNT(*) FROM cached_lessons")
+    suspend fun countTotalLessons(): Int
+}
+
+
 
 
