@@ -20,6 +20,8 @@ sealed class VoiceCommandResult {
     data class ToggleContinuousMode(val enable: Boolean, val feedback: String) : VoiceCommandResult()
     data class ToggleAutoSpeech(val enable: Boolean, val feedback: String) : VoiceCommandResult()
     data class AdjustSpeechRate(val delta: Float, val feedback: String) : VoiceCommandResult()
+    data class StartHandsFree(val feedback: String) : VoiceCommandResult()
+    data class StopHandsFree(val feedback: String) : VoiceCommandResult()
     data class Help(val feedback: String) : VoiceCommandResult()
     data class ConversationPrompt(val prompt: String) : VoiceCommandResult()
 }
@@ -286,6 +288,20 @@ object VoiceCommandManager {
                 enable = false,
                 feedback = "Mode conversation continue désactivé."
             )
+        }
+
+        // 13b. Hands-Free English Conversation Mode
+        if (norm.contains("quitter mains libres") || norm.contains("arrete mains libres") ||
+            norm.contains("stop hands free") || norm.contains("ferme mains libres") ||
+            norm.contains("desactive mains libres") || norm.contains("quitte mains libres")
+        ) {
+            return VoiceCommandResult.StopHandsFree("Session mains libres terminée.")
+        }
+        if (norm.contains("mains libres") || norm.contains("hands free") ||
+            norm.contains("conversation mains libres") || norm.contains("pratique danglais mains libres") ||
+            norm.contains("english practice") || norm == "hands-free" || norm == "handsfree"
+        ) {
+            return VoiceCommandResult.StartHandsFree("Ouverture de l'atelier de conversation en anglais mains libres.")
         }
 
         // 14. Auto-Speech / Voice synthesis toggle

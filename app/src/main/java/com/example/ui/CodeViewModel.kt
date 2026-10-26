@@ -153,6 +153,16 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentSpokenWord = MutableStateFlow<String?>(null)
     val currentSpokenWord: StateFlow<String?> = _currentSpokenWord.asStateFlow()
 
+    // Hands-Free English Conversation Mode
+    private val _isHandsFreeMode = MutableStateFlow(false)
+    val isHandsFreeMode: StateFlow<Boolean> = _isHandsFreeMode.asStateFlow()
+
+    private val _handsFreeStatus = MutableStateFlow("Prêt pour la conversation continue en anglais")
+    val handsFreeStatus: StateFlow<String> = _handsFreeStatus.asStateFlow()
+
+    private val _isHandsFreeSheetVisible = MutableStateFlow(false)
+    val isHandsFreeSheetVisible: StateFlow<Boolean> = _isHandsFreeSheetVisible.asStateFlow()
+
     private val _installedTtsEngines = MutableStateFlow<List<TtsEngineInfo>>(emptyList())
     val installedTtsEngines: StateFlow<List<TtsEngineInfo>> = _installedTtsEngines.asStateFlow()
 
@@ -347,12 +357,20 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             onSpeechCompleted = {
                 _currentlySpokenText.value = null
                 _currentSpokenWord.value = null
-                // Continuous conversation mode: auto-rearm microphone
+                // Hands-free & Continuous conversation mode: auto-rearm microphone
                 viewModelScope.launch {
-                    val profile = userProfile.value
-                    if (profile.continuousMode && !_isListening.value) {
-                        delay(600) // comfortable pause before mic opens
-                        startListening()
+                    if (_isHandsFreeMode.value) {
+                        _handsFreeStatus.value = "À ton tour ! Parle en anglais..."
+                        delay(450) // Acoustic safety grace period so mic doesn't catch trailing speaker echo
+                        if (_isHandsFreeMode.value && !_isListening.value && !_isSpeaking.value) {
+                            startHandsFreeListening()
+                        }
+                    } else {
+                        val profile = userProfile.value
+                        if (profile.continuousMode && !_isListening.value) {
+                            delay(600) // comfortable pause before mic opens
+                            startListening()
+                        }
                     }
                 }
             },
@@ -1227,6 +1245,96 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         _statusText.value = "Prêt"
     }
 
+    // --- Hands-Free English Conversation Engine ---
+
+    fun showHandsFreeSheet() {
+        _isHandsFreeSheetVisible.value = true
+    }
+
+    fun hideHandsFreeSheet() {
+        _isHandsFreeSheetVisible.value = false
+        if (_isHandsFreeMode.value) {
+            stopHandsFreeConversation()
+        }
+    }
+
+    fun startHandsFreeConversation(introPrompt: String? = null) {
+        _isHandsFreeMode.value = true
+        _isHandsFreeSheetVisible.value = true
+        speechManager?.setHandsFree(true)
+        _selectedMode.value = TutorMode.ENGLISH_TEACHER
+
+        val companionName = userProfile.value.companionName.ifBlank { "Code" }
+        val intro = introPrompt ?: "Hello! I am $companionName, your English conversation partner. We can talk hands-free about anything you like! What would you like to discuss today?"
+        _handsFreeStatus.value = "Code te parle en anglais..."
+        _statusText.value = "Mains libres en anglais avec $companionName"
+        _orbState.value = OrbState.SPEAKING
+        _liveCodeReply.value = intro
+
+        viewModelScope.launch {
+            database.conversationDao().insertMessage(
+                ConversationMessage(
+                    role = "code",
+                    text = intro,
+                    mode = TutorMode.ENGLISH_TEACHER.name
+                )
+            )
+            speak(intro, languageOverride = "en-US")
+        }
+    }
+
+    fun startHandsFreeListening() {
+        if (!_isHandsFreeMode.value) return
+        if (_isSpeaking.value) {
+            stopSpeaking()
+        }
+        _handsFreeStatus.value = "À ton tour ! Parle en anglais..."
+        _orbState.value = OrbState.LISTENING
+        _statusText.value = "Écoute continue en anglais..."
+        speechManager?.startListening(languageCode = "en-US", isHandsFree = true)
+    }
+
+    fun pauseHandsFreeListening() {
+        speechManager?.pauseHandsFreeListening()
+        _handsFreeStatus.value = "Micro en pause. Appuie pour reprendre."
+        _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
+    }
+
+    fun resumeHandsFreeListening() {
+        if (_isHandsFreeMode.value && !_isSpeaking.value) {
+            startHandsFreeListening()
+        }
+    }
+
+    fun stopHandsFreeConversation() {
+        _isHandsFreeMode.value = false
+        _isHandsFreeSheetVisible.value = false
+        speechManager?.setHandsFree(false)
+        cancelRecording()
+        stopSpeaking()
+        _handsFreeStatus.value = "Session mains libres terminée"
+        _statusText.value = "Prêt à discuter"
+        _orbState.value = if (_isOnline.value) OrbState.IDLE else OrbState.OFFLINE
+    }
+
+    fun toggleHandsFreeConversation() {
+        if (_isHandsFreeMode.value) {
+            stopHandsFreeConversation()
+        } else {
+            startHandsFreeConversation()
+        }
+    }
+
+    fun bargeInHandsFree() {
+        stopSpeaking()
+        viewModelScope.launch {
+            delay(250)
+            if (_isHandsFreeMode.value) {
+                startHandsFreeListening()
+            }
+        }
+    }
+
     fun processSpokenVoice(spokenText: String) {
         val clean = spokenText.trim()
         if (clean.isBlank()) return
@@ -1299,6 +1407,15 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                     userProfile.value.voiceId
                 )
                 _lastVoiceCommandBanner.value = "Vitesse : ${"%.2f".format(newRate)}x"
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.StartHandsFree -> {
+                _lastVoiceCommandBanner.value = "Mains libres activé 🇬🇧"
+                startHandsFreeConversation()
+            }
+            is VoiceCommandResult.StopHandsFree -> {
+                _lastVoiceCommandBanner.value = "Mains libres arrêté"
+                stopHandsFreeConversation()
                 speak(commandResult.feedback)
             }
             is VoiceCommandResult.Help -> {
@@ -1481,7 +1598,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                             delay(2200)
                             speakPronunciationExercise(exercise, slowPace = true)
                         }
-                    } else if (_isAutoSpeakEnabled.value) {
+                    } else if (_isAutoSpeakEnabled.value || _isHandsFreeMode.value) {
                         speak(response.replyText)
                     }
                 }
@@ -1513,9 +1630,14 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         )
     }
 
-    fun speak(text: String) {
+    fun speak(text: String, languageOverride: String? = null) {
         _currentlySpokenText.value = text
-        ttsManager?.speak(text)
+        val lang = languageOverride ?: if (_isHandsFreeMode.value || _selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else null
+        if (lang != null) {
+            ttsManager?.speakWithSettings(text, languageOverride = lang)
+        } else {
+            ttsManager?.speak(text)
+        }
     }
 
     fun speakMessage(message: ConversationMessage) {

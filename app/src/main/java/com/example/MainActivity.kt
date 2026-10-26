@@ -140,6 +140,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val isAgenticHarnessDialogVisible by viewModel.isAgenticHarnessDialogVisible.collectAsState()
     val isVoiceCommandDialogVisible by viewModel.isVoiceCommandDialogVisible.collectAsState()
     val isPronunciationDialogVisible by viewModel.isPronunciationDialogVisible.collectAsState()
+    val isHandsFreeSheetVisible by viewModel.isHandsFreeSheetVisible.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
     var showLevelTestDialog by remember { mutableStateOf(false) }
 
@@ -433,6 +434,14 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 com.example.ui.screens.PronunciationPracticeDialog(
                     viewModel = viewModel,
                     onDismiss = { viewModel.hidePronunciationDialog() }
+                )
+            }
+
+            // Hands-Free English Practice Sheet
+            if (isHandsFreeSheetVisible) {
+                com.example.ui.components.HandsFreeConversationSheet(
+                    viewModel = viewModel,
+                    onDismiss = { viewModel.hideHandsFreeSheet() }
                 )
             }
 

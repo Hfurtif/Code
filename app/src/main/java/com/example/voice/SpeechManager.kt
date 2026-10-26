@@ -32,7 +32,10 @@ class SpeechManager(
 ) {
     private var speechRecognizer: SpeechRecognizer? = null
     private var userWantsToRecord = false
-    private var currentLanguage = "fr-FR"
+    private var isHandsFreeMode = false
+    private var silenceCommitRunnable: Runnable? = null
+    private var lastSpeechDetectedTime = 0L
+    private var currentLanguage = "en-US"
     private var accumulatedText = ""
     private var lastPartialText = ""
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -41,6 +44,7 @@ class SpeechManager(
     companion object {
         private const val TAG = "SpeechManager"
         private const val MAX_CONSECUTIVE_RESTARTS = 2
+        private const val HANDS_FREE_SILENCE_TIMEOUT_MS = 1400L
     }
 
     fun isAvailable(): Boolean {
@@ -55,7 +59,13 @@ class SpeechManager(
         }
     }
 
-    fun startListening(languageCode: String = "fr-FR") {
+    fun isHandsFree(): Boolean = isHandsFreeMode
+
+    fun setHandsFree(enabled: Boolean) {
+        isHandsFreeMode = enabled
+    }
+
+    fun startListening(languageCode: String = "en-US", isHandsFree: Boolean = false) {
         mainHandler.post {
             if (!isAvailable()) {
                 onErrorOccurred("Reconnaissance vocale in-app indisponible sur cet appareil. Utilise la dictée système ou le clavier !")
@@ -63,7 +73,9 @@ class SpeechManager(
                 return@post
             }
 
+            cancelSilenceWatchdog()
             userWantsToRecord = true
+            isHandsFreeMode = isHandsFree
             currentLanguage = languageCode
             accumulatedText = ""
             lastPartialText = ""
@@ -72,6 +84,47 @@ class SpeechManager(
             triggerHapticFeedback()
             onListeningStateChanged(true)
             initAndStartRecognizer()
+        }
+    }
+
+    private fun scheduleSilenceWatchdog(delayMillis: Long = HANDS_FREE_SILENCE_TIMEOUT_MS) {
+        cancelSilenceWatchdog()
+        if (!isHandsFreeMode || !userWantsToRecord) return
+
+        val runnable = Runnable {
+            if (!userWantsToRecord) return@Runnable
+            val inFlight = lastPartialText.trim()
+            val total = if (inFlight.isNotBlank()) {
+                if (accumulatedText.isBlank()) inFlight else "$accumulatedText $inFlight"
+            } else {
+                accumulatedText
+            }.trim()
+
+            if (total.isNotBlank()) {
+                Log.d(TAG, "Silence watchdog auto-committing hands-free speech: '$total'")
+                commitSpeechInternal(total)
+            }
+        }
+        silenceCommitRunnable = runnable
+        mainHandler.postDelayed(runnable, delayMillis)
+    }
+
+    private fun cancelSilenceWatchdog() {
+        silenceCommitRunnable?.let { mainHandler.removeCallbacks(it) }
+        silenceCommitRunnable = null
+    }
+
+    private fun commitSpeechInternal(totalSpoken: String) {
+        cancelSilenceWatchdog()
+        userWantsToRecord = false
+        accumulatedText = ""
+        lastPartialText = ""
+        restartAttemptCount = 0
+        onListeningStateChanged(false)
+        cleanupRecognizerOnly()
+        triggerHapticFeedback()
+        if (totalSpoken.isNotBlank()) {
+            onFinalResult(totalSpoken)
         }
     }
 
@@ -101,6 +154,8 @@ class SpeechManager(
                     override fun onBeginningOfSpeech() {
                         Log.d(TAG, "SpeechRecognizer onBeginningOfSpeech")
                         restartAttemptCount = 0
+                        lastSpeechDetectedTime = System.currentTimeMillis()
+                        cancelSilenceWatchdog()
                         if (userWantsToRecord) {
                             onListeningStateChanged(true)
                         }
@@ -110,16 +165,26 @@ class SpeechManager(
                         // Normalize dB (-2 to 10 typical) to 0.0 .. 1.0 range
                         val normalized = ((rmsdB + 2f) / 12f).coerceIn(0f, 1f)
                         onRmsUpdated(normalized)
+                        if (normalized > 0.25f && (accumulatedText.isNotBlank() || lastPartialText.isNotBlank())) {
+                            lastSpeechDetectedTime = System.currentTimeMillis()
+                            if (isHandsFreeMode) {
+                                scheduleSilenceWatchdog(1500L)
+                            }
+                        }
                     }
 
                     override fun onBufferReceived(buffer: ByteArray?) {}
 
                     override fun onEndOfSpeech() {
                         Log.d(TAG, "SpeechRecognizer onEndOfSpeech")
+                        if (isHandsFreeMode && (accumulatedText.isNotBlank() || lastPartialText.isNotBlank())) {
+                            scheduleSilenceWatchdog(800L)
+                        }
                     }
 
                     override fun onError(error: Int) {
                         Log.d(TAG, "SpeechRecognizer onError: $error (${getErrorMessage(error)})")
+                        cancelSilenceWatchdog()
 
                         if (!userWantsToRecord) return
 
@@ -142,21 +207,21 @@ class SpeechManager(
                         // If user has already spoken something, deliver it as final result on timeout/no_match
                         if (accumulatedText.isNotBlank()) {
                             val total = accumulatedText.trim()
-                            userWantsToRecord = false
-                            accumulatedText = ""
-                            onListeningStateChanged(false)
-                            cleanupRecognizerOnly()
-                            triggerHapticFeedback()
-                            onFinalResult(total)
+                            commitSpeechInternal(total)
                             return
                         }
 
-                        // Check if we hit max consecutive restarts without speech input
-                        if (restartAttemptCount >= MAX_CONSECUTIVE_RESTARTS) {
+                        // In hands-free mode, allow up to 8 idle listening cycles before timing out to standby
+                        val maxRestarts = if (isHandsFreeMode) 8 else MAX_CONSECUTIVE_RESTARTS
+                        if (restartAttemptCount >= maxRestarts) {
                             userWantsToRecord = false
                             onListeningStateChanged(false)
                             cleanupRecognizerOnly()
-                            onErrorOccurred(getErrorMessage(error))
+                            if (!isHandsFreeMode) {
+                                onErrorOccurred(getErrorMessage(error))
+                            } else {
+                                onErrorOccurred("Mode mains-libres en veille. Dis « Hello » ou réactive le micro !")
+                            }
                             return
                         }
 
@@ -167,6 +232,7 @@ class SpeechManager(
                     override fun onResults(results: Bundle?) {
                         Log.d(TAG, "SpeechRecognizer onResults received")
                         restartAttemptCount = 0
+                        cancelSilenceWatchdog()
 
                         val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                         val spokenChunk = matches?.firstOrNull()?.trim() ?: lastPartialText.trim()
@@ -175,6 +241,14 @@ class SpeechManager(
                         if (spokenChunk.isNotBlank()) {
                             accumulatedText = if (accumulatedText.isBlank()) spokenChunk else "$accumulatedText $spokenChunk"
                             onPartialResult(accumulatedText)
+                        }
+
+                        if (isHandsFreeMode) {
+                            val total = accumulatedText.trim()
+                            if (total.isNotBlank()) {
+                                commitSpeechInternal(total)
+                                return
+                            }
                         }
 
                         // If the user hasn't explicitly clicked to stop, continue listening seamlessly
@@ -191,6 +265,9 @@ class SpeechManager(
                             lastPartialText = partial
                             val fullPreview = if (accumulatedText.isBlank()) partial else "$accumulatedText $partial"
                             onPartialResult(fullPreview)
+                            if (isHandsFreeMode) {
+                                scheduleSilenceWatchdog(1400L)
+                            }
                         }
                     }
 
@@ -206,6 +283,9 @@ class SpeechManager(
                 putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 1200L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 1000L)
             }
 
             speechRecognizer?.startListening(intent)
@@ -241,6 +321,7 @@ class SpeechManager(
      */
     fun stopListeningAndCommit() {
         mainHandler.post {
+            cancelSilenceWatchdog()
             userWantsToRecord = false
             onListeningStateChanged(false)
 
@@ -267,6 +348,7 @@ class SpeechManager(
 
     fun cancelListening() {
         mainHandler.post {
+            cancelSilenceWatchdog()
             userWantsToRecord = false
             accumulatedText = ""
             lastPartialText = ""
@@ -276,7 +358,17 @@ class SpeechManager(
         }
     }
 
+    fun pauseHandsFreeListening() {
+        mainHandler.post {
+            cancelSilenceWatchdog()
+            userWantsToRecord = false
+            onListeningStateChanged(false)
+            cleanupRecognizerOnly()
+        }
+    }
+
     private fun cleanupRecognizerOnly() {
+        cancelSilenceWatchdog()
         try {
             speechRecognizer?.cancel()
             speechRecognizer?.destroy()

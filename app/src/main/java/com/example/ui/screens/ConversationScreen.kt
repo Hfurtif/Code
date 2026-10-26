@@ -165,6 +165,8 @@ fun ConversationScreen(
     val vocabList by viewModel.allVocabulary.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
     val lastVoiceCommandBanner by viewModel.lastVoiceCommandBanner.collectAsState()
+    val isHandsFreeMode by viewModel.isHandsFreeMode.collectAsState()
+    val isHandsFreeSheetVisible by viewModel.isHandsFreeSheetVisible.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     var showAddSourceDialog by remember { mutableStateOf(false) }
@@ -344,6 +346,41 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                // Hands-Free English Practice Button
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.startHandsFreeConversation() }
+                        .testTag("top_hands_free_button"),
+                    color = if (isHandsFreeMode) SuccessGreen.copy(alpha = 0.25f) else ElectricBlue.copy(alpha = 0.2f),
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isHandsFreeMode) SuccessGreen else ElectricBlue.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "🇬🇧",
+                            fontSize = 12.sp
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isHandsFreeMode) "Mains Libres Actif" else "Mains Libres",
+                            color = if (isHandsFreeMode) SuccessGreen else TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
                 // Flashcards Review Button
                 Surface(
                     modifier = Modifier
@@ -1654,6 +1691,41 @@ fun ConversationScreen(
                                 }
                             }
                         }
+                    }
+                }
+
+                // Hands-Free Quick Launch & Status Chip
+                Surface(
+                    modifier = Modifier
+                        .padding(vertical = 4.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .clickable {
+                            if (isHandsFreeMode) {
+                                viewModel.showHandsFreeSheet()
+                            } else {
+                                viewModel.startHandsFreeConversation()
+                            }
+                        }
+                        .testTag("hands_free_quick_chip"),
+                    color = if (isHandsFreeMode) SuccessGreen.copy(alpha = 0.2f) else DarkSurfaceVariant,
+                    shape = RoundedCornerShape(16.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isHandsFreeMode) SuccessGreen else DarkCardBorder
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(text = "🇬🇧", fontSize = 14.sp)
+                        Text(
+                            text = if (isHandsFreeMode) "Mains Libres Actif • Appuie pour ouvrir l'atelier" else "Pratique d'anglais Mains Libres (Full Duplex)",
+                            color = if (isHandsFreeMode) SuccessGreen else NeonCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
 
