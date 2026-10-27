@@ -262,6 +262,51 @@ data class CachedLesson(
     }
 }
 
+/**
+ * Holographic Display Card inspired by JARVIS HUD display_card tool.
+ * Represents on-screen visual insights (calculations, code, lists, definitions, steps).
+ */
+data class HudDisplayCard(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val content: String,
+    val kind: String = "info", // "info", "result", "code", "warning"
+    val timestamp: Long = System.currentTimeMillis()
+)
+
+/**
+ * Key Performance Indicator tile for JARVIS display_report dashboard.
+ */
+data class HudKpi(
+    val label: String,
+    val value: String,
+    val delta: String? = null,
+    val isPositive: Boolean = true
+)
+
+/**
+ * Full interactive Data Report Dashboard inspired by JARVIS display_report tool.
+ */
+data class HudReport(
+    val id: String = java.util.UUID.randomUUID().toString(),
+    val title: String,
+    val kpis: List<HudKpi> = emptyList(),
+    val chartTitle: String? = null,
+    val chartData: List<Pair<String, Float>> = emptyList(),
+    val tableColumns: List<String> = emptyList(),
+    val tableRows: List<List<String>> = emptyList(),
+    val markdownNotes: String? = null
+)
+
+/**
+ * Application or URL launch target inspired by JARVIS open_app and open_url tools.
+ */
+data class LaunchTarget(
+    val appName: String,
+    val url: String? = null,
+    val packageName: String? = null
+)
+
 
 
 

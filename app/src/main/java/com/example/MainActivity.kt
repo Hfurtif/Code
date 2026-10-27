@@ -82,13 +82,6 @@ import com.example.ui.theme.NeonCyan
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.outlined.School
-import androidx.compose.material.icons.filled.TrendingUp
-import androidx.compose.material.icons.outlined.TrendingUp
-import com.example.ui.screens.LessonsScreen
-import com.example.ui.screens.ProgressScreen
-import com.example.ui.screens.LevelTestDialog
 import com.example.ui.screens.TeacherOnboardingScreen
 
 sealed class NavTab(
@@ -97,10 +90,8 @@ sealed class NavTab(
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector
 ) {
-    object Conversation : NavTab("conversation", "Discussion", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
-    object Lessons : NavTab("lessons", "Pôles & Cours", Icons.Filled.School, Icons.Outlined.School)
+    object Conversation : NavTab("conversation", "J.A.R.V.I.S.", Icons.Filled.ChatBubble, Icons.Outlined.ChatBubbleOutline)
     object Sources : NavTab("sources", "Sources", Icons.Filled.Folder, Icons.Outlined.Folder)
-    object Progress : NavTab("progress", "Progression", Icons.Filled.TrendingUp, Icons.Outlined.TrendingUp)
     object Settings : NavTab("settings", "Réglages", Icons.Filled.Settings, Icons.Outlined.Settings)
 }
 
@@ -139,10 +130,8 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     val installedTtsEngines by viewModel.installedTtsEngines.collectAsState()
     val isAgenticHarnessDialogVisible by viewModel.isAgenticHarnessDialogVisible.collectAsState()
     val isVoiceCommandDialogVisible by viewModel.isVoiceCommandDialogVisible.collectAsState()
-    val isPronunciationDialogVisible by viewModel.isPronunciationDialogVisible.collectAsState()
     val isHandsFreeSheetVisible by viewModel.isHandsFreeSheetVisible.collectAsState()
     val agenticState by viewModel.agenticExecutionState.collectAsState()
-    var showLevelTestDialog by remember { mutableStateOf(false) }
 
     val shouldShowOnboarding = !userProfile.hasCompletedOnboarding || showOnboardingScreen
 
@@ -177,7 +166,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
     }
 
     val launchSystemSpeech: () -> Unit = {
-        val lang = if (viewModel.selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else userProfile.preferredLanguageCode
+        val lang = userProfile.preferredLanguageCode
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, lang)
@@ -208,9 +197,7 @@ fun MainAppContainer(viewModel: CodeViewModel) {
 
     val tabs = listOf(
         NavTab.Conversation,
-        NavTab.Lessons,
         NavTab.Sources,
-        NavTab.Progress,
         NavTab.Settings
     )
 
@@ -277,19 +264,11 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                     },
                     onLaunchSystemSpeech = launchSystemSpeech
                 )
-                1 -> LessonsScreen(
+                1 -> SourcesScreen(
                     viewModel = viewModel,
                     onNavigateToConversation = { selectedTabIndex = 0 }
                 )
-                2 -> SourcesScreen(
-                    viewModel = viewModel,
-                    onNavigateToConversation = { selectedTabIndex = 0 }
-                )
-                3 -> ProgressScreen(
-                    viewModel = viewModel,
-                    onLaunchLevelTest = { showLevelTestDialog = true }
-                )
-                4 -> SettingsScreen(viewModel = viewModel)
+                2 -> SettingsScreen(viewModel = viewModel)
             }
 
             // Info Banner Notification Overlay (if any info/error message)
@@ -429,27 +408,11 @@ fun MainAppContainer(viewModel: CodeViewModel) {
                 )
             }
 
-            // English Pronunciation Guidance Studio Dialog
-            if (isPronunciationDialogVisible) {
-                com.example.ui.screens.PronunciationPracticeDialog(
-                    viewModel = viewModel,
-                    onDismiss = { viewModel.hidePronunciationDialog() }
-                )
-            }
-
-            // Hands-Free English Practice Sheet
+            // Hands-Free Conversation Sheet
             if (isHandsFreeSheetVisible) {
                 com.example.ui.components.HandsFreeConversationSheet(
                     viewModel = viewModel,
                     onDismiss = { viewModel.hideHandsFreeSheet() }
-                )
-            }
-
-            // Level Evaluation Test Dialog
-            if (showLevelTestDialog) {
-                LevelTestDialog(
-                    viewModel = viewModel,
-                    onDismiss = { showLevelTestDialog = false }
                 )
             }
         }

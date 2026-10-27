@@ -102,6 +102,61 @@ fun AnimatedOrb(
             when (state) {
                 OrbState.IDLE -> {
                     val radius = baseRadius * breatheScale
+
+                    // 60 Tick marks graduation ring (Arc Reactor perimeter)
+                    val tickRadius0 = baseRadius * 1.32f
+                    val tickRadius1 = baseRadius * 1.38f
+                    val tickRadiusBig = baseRadius * 1.43f
+                    for (i in 0 until 60) {
+                        val angleRad = (i.toFloat() / 60f) * (2 * PI).toFloat() - (rotationAngle * 0.03f * (PI.toFloat() / 180f))
+                        val isBig = i % 5 == 0
+                        val tickColor = if (isBig) OfflineAmber.copy(alpha = 0.85f) else NeonCyan.copy(alpha = 0.35f)
+                        val rEnd = if (isBig) tickRadiusBig else tickRadius1
+                        val x0 = center.x + tickRadius0 * cos(angleRad)
+                        val y0 = center.y + tickRadius0 * sin(angleRad)
+                        val x1 = center.x + rEnd * cos(angleRad)
+                        val y1 = center.y + rEnd * sin(angleRad)
+                        drawLine(
+                            color = tickColor,
+                            start = Offset(x0, y0),
+                            end = Offset(x1, y1),
+                            strokeWidth = if (isBig) 2.5f else 1.2f
+                        )
+                    }
+
+                    // 12 Segmented Arc Reactor Coils
+                    val coilRadius = baseRadius * 1.22f
+                    val segAngle = 360f / 12f
+                    val sweep = segAngle * 0.62f
+                    for (i in 0 until 12) {
+                        val startAngle = (rotationAngle * 0.25f) + (i * segAngle)
+                        drawArc(
+                            color = NeonCyan.copy(alpha = 0.45f + 0.35f * sin((rotationAngle * 0.04f + i).toDouble()).toFloat()),
+                            startAngle = startAngle,
+                            sweepAngle = sweep,
+                            useCenter = false,
+                            topLeft = Offset(center.x - coilRadius, center.y - coilRadius),
+                            size = androidx.compose.ui.geometry.Size(coilRadius * 2, coilRadius * 2),
+                            style = Stroke(width = 4.5f)
+                        )
+                    }
+
+                    // Triangular Core Frame (Arc Reactor Mark VII)
+                    val triRadius = baseRadius * 0.82f
+                    val triPath = Path()
+                    for (i in 0..3) {
+                        val a = ((i % 3) * (2 * PI / 3) - (PI / 2) - (rotationAngle * 0.02f * PI / 180f)).toFloat()
+                        val x = center.x + triRadius * cos(a)
+                        val y = center.y + triRadius * sin(a)
+                        if (i == 0) triPath.moveTo(x, y) else triPath.lineTo(x, y)
+                    }
+                    triPath.close()
+                    drawPath(
+                        path = triPath,
+                        color = NeonCyan.copy(alpha = 0.35f),
+                        style = Stroke(width = 1.8f)
+                    )
+
                     // Outer ambient halo
                     drawCircle(
                         brush = Brush.radialGradient(

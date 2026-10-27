@@ -22,6 +22,10 @@ sealed class VoiceCommandResult {
     data class AdjustSpeechRate(val delta: Float, val feedback: String) : VoiceCommandResult()
     data class StartHandsFree(val feedback: String) : VoiceCommandResult()
     data class StopHandsFree(val feedback: String) : VoiceCommandResult()
+    data class OpenApp(val appName: String, val feedback: String) : VoiceCommandResult()
+    data class OpenUrl(val url: String, val feedback: String) : VoiceCommandResult()
+    data class CancelTask(val feedback: String) : VoiceCommandResult()
+    data class SwitchToJarvis(val feedback: String) : VoiceCommandResult()
     data class Help(val feedback: String) : VoiceCommandResult()
     data class ConversationPrompt(val prompt: String) : VoiceCommandResult()
 }
@@ -71,10 +75,10 @@ object VoiceCommandManager {
             category = "Recherche & Agent"
         ),
         VoiceCommandHelpItem(
-            title = "Changer de rôle / mode",
-            examples = listOf("\"Mode prof d'anglais\"", "\"Passe en mode maths\"", "\"Mode ami\"", "\"Mode professeur particulier\""),
-            description = "Bascule instantanément de tuteur (Anglais, Maths, Spécialiste ou Ami omniscient).",
-            category = "Pédagogie"
+            title = "Protocole J.A.R.V.I.S.",
+            examples = listOf("\"Mode JARVIS\"", "\"Bonjour JARVIS\"", "\"Active JARVIS\""),
+            description = "Active le majordome vocal Mark VII avec concision, cartes HUD et rapports exécutifs.",
+            category = "Système"
         ),
         VoiceCommandHelpItem(
             title = "Révision & Quiz",
@@ -183,47 +187,11 @@ object VoiceCommandManager {
             }
         }
 
-        // 5. English Teacher mode
-        if (norm.contains("mode prof d'anglais") || norm.contains("mode anglais") ||
-            norm.contains("professeur d'anglais") || norm.contains("passe en anglais") ||
-            norm.contains("parle anglais") || norm.contains("english teacher") || norm == "english mode"
+        // 5. J.A.R.V.I.S. Mode direct trigger
+        if (norm.contains("mode jarvis") || norm.contains("majordome") || norm == "jarvis" ||
+            norm.contains("active jarvis") || norm.contains("bonjour jarvis")
         ) {
-            return VoiceCommandResult.ModeChange(
-                TutorMode.ENGLISH_TEACHER,
-                "Mode Professeur d'anglais activé ! Let's practice English together!"
-            )
-        }
-
-        // 6. Math Teacher mode
-        if (norm.contains("mode math") || norm.contains("mode prof de math") ||
-            norm.contains("professeur de mathematiques") || norm.contains("passe en maths") ||
-            norm == "mode math" || norm == "math teacher"
-        ) {
-            return VoiceCommandResult.ModeChange(
-                TutorMode.MATH_TEACHER,
-                "Mode Professeur de mathématiques activé ! Prêt pour résoudre des calculs et problèmes."
-            )
-        }
-
-        // 7. Custom Teacher mode
-        if (norm.contains("mode professeur particulier") || norm.contains("mode tuteur") ||
-            norm.contains("professeur particulier")
-        ) {
-            return VoiceCommandResult.ModeChange(
-                TutorMode.CUSTOM_TEACHER,
-                "Mode Professeur particulier activé. Quel sujet souhaites-tu explorer en profondeur ?"
-            )
-        }
-
-        // 8. Friend / General conversation mode
-        if (norm.contains("mode ami") || norm.contains("mode normal") ||
-            norm.contains("mode conversation") || norm.contains("ami omniscient") ||
-            norm == "mode ami"
-        ) {
-            return VoiceCommandResult.ModeChange(
-                TutorMode.FRIEND,
-                "Mode Ami omniscient réactivé. Je t'écoute !"
-            )
+            return VoiceCommandResult.SwitchToJarvis("Mode J.A.R.V.I.S. activé. À votre service, monsieur.")
         }
 
         // 9. Quiz / Review command
@@ -302,6 +270,45 @@ object VoiceCommandManager {
             norm.contains("english practice") || norm == "hands-free" || norm == "handsfree"
         ) {
             return VoiceCommandResult.StartHandsFree("Ouverture de l'atelier de conversation en anglais mains libres.")
+        }
+
+        // 13c. J.A.R.V.I.S. Mode switch
+        if (norm.contains("mode jarvis") || norm.contains("majordome") || norm == "jarvis" ||
+            norm.contains("active jarvis") || norm.contains("bonjour jarvis")
+        ) {
+            return VoiceCommandResult.SwitchToJarvis("Mode J.A.R.V.I.S. activé. À votre service, monsieur.")
+        }
+
+
+        // 13e. Cancel Task (JARVIS cancel_task)
+        if (norm.contains("annule la tache") || norm.contains("arrete la tache") ||
+            norm.contains("annule la mission") || norm.contains("arrete la mission") ||
+            norm == "cancel task" || norm == "stop task"
+        ) {
+            return VoiceCommandResult.CancelTask("Annulation de la tâche demandée.")
+        }
+
+        // 13f. Launch Application / URL (JARVIS open_app & open_url)
+        val appPrefixes = listOf("ouvre ", "lance ", "open ", "démarre ", "demarre ")
+        for (prefix in appPrefixes) {
+            val normPrefix = normalize(prefix)
+            if (norm.startsWith(normPrefix) && norm.length > normPrefix.length + 1) {
+                val appTarget = clean.substring(prefix.length).trim().trimEnd('.', '!')
+                val normTarget = normalize(appTarget)
+                if (normTarget.isNotBlank() &&
+                    !normTarget.contains("mode") &&
+                    !normTarget.contains("quiz") &&
+                    !normTarget.contains("flashcard") &&
+                    !normTarget.contains("harnais") &&
+                    !normTarget.contains("studio") &&
+                    !normTarget.contains("voix")
+                ) {
+                    if (appTarget.startsWith("http://") || appTarget.startsWith("https://") || appTarget.contains(".com") || appTarget.contains(".fr")) {
+                        return VoiceCommandResult.OpenUrl(appTarget, "Ouverture du site web, monsieur.")
+                    }
+                    return VoiceCommandResult.OpenApp(appTarget, "Ouverture de $appTarget, monsieur.")
+                }
+            }
         }
 
         // 14. Auto-Speech / Voice synthesis toggle

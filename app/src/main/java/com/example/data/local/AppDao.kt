@@ -86,6 +86,9 @@ interface VocabularyDao {
     @Query("SELECT * FROM vocabulary WHERE nextReviewDate <= :currentTime ORDER BY nextReviewDate ASC")
     fun getDueForReview(currentTime: Long): Flow<List<Vocabulary>>
 
+    @Query("SELECT COUNT(*) FROM vocabulary")
+    suspend fun countTotalVocabulary(): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertWord(vocabulary: Vocabulary)
 

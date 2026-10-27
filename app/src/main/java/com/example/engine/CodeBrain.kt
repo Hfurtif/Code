@@ -40,7 +40,10 @@ data class BrainResponse(
     val webSourceUrl: String? = null,
     val newCompanionName: String? = null,
     val citationChunks: List<com.example.engine.CalameAnalysisEngine.SourceChunk> = emptyList(),
-    val pronunciationTargetWord: String? = null
+    val pronunciationTargetWord: String? = null,
+    val displayCard: com.example.data.model.HudDisplayCard? = null,
+    val displayReport: com.example.data.model.HudReport? = null,
+    val launchTarget: com.example.data.model.LaunchTarget? = null
 )
 
 class CodeBrain(
@@ -121,7 +124,53 @@ class CodeBrain(
             )
         }
 
-        // 2. Storage Authorization Request / Confirmation (+20 GB)
+        // 2b. JARVIS Application & URL Opening (open_app & open_url)
+        val appPrefixes = listOf("ouvre ", "lance ", "open ", "démarre ", "demarre ")
+        for (prefix in appPrefixes) {
+            if (lower.startsWith(prefix) && lower.length > prefix.length + 1) {
+                val appTarget = trimmed.substring(prefix.length).trim().trimEnd('.', '!')
+                val normTarget = appTarget.lowercase()
+                if (normTarget.isNotBlank() &&
+                    !normTarget.contains("mode") &&
+                    !normTarget.contains("quiz") &&
+                    !normTarget.contains("flashcard") &&
+                    !normTarget.contains("harnais") &&
+                    !normTarget.contains("studio") &&
+                    !normTarget.contains("voix")
+                ) {
+                    val isUrl = appTarget.startsWith("http://") || appTarget.startsWith("https://") || appTarget.contains(".com") || appTarget.contains(".fr")
+                    val card = com.example.data.model.HudDisplayCard(
+                        title = if (isUrl) "Ouverture Web" else "Lancement Application",
+                        content = "Lancement de **$appTarget** sur l'appareil.",
+                        kind = "info"
+                    )
+                    return@withContext BrainResponse(
+                        replyText = "Ouverture de $appTarget, monsieur.",
+                        triggeredCommand = "open_app:$appTarget",
+                        launchTarget = com.example.data.model.LaunchTarget(appName = appTarget, url = if (isUrl) appTarget else null),
+                        displayCard = card
+                    )
+                }
+            }
+        }
+
+
+        // 2d. JARVIS Mode direct trigger
+        if (lower.contains("mode jarvis") || lower.contains("majordome") || lower == "jarvis" ||
+            lower.contains("active jarvis") || lower.contains("bonjour jarvis")
+        ) {
+            val card = com.example.data.model.HudDisplayCard(
+                title = "J.A.R.V.I.S. En Ligne",
+                content = "Protocole Mark VII activé. Réponses concises, délégation agentique et affichage holographique prêts.",
+                kind = "info"
+            )
+            return@withContext BrainResponse(
+                replyText = "À votre service, monsieur. J.A.R.V.I.S. est prêt pour vos instructions.",
+                newMode = TutorMode.JARVIS,
+                triggeredCommand = "mode:JARVIS",
+                displayCard = card
+            )
+        }
         if (lower.contains("ajoute 20 go") || lower.contains("augmente le stockage") ||
             lower.contains("plus de stockage") || lower.contains("je t'autorise") ||
             (lower.contains("autorise") && lower.contains("stockage")) ||
@@ -674,123 +723,57 @@ class CodeBrain(
         val isEnglishLang = lang.code.startsWith("en")
 
         val correctionPrefix = if (detectedMistake != null) {
-            "Petite correction : tu as dit \"${detectedMistake.badPhrase}\". On dit plutôt \"${detectedMistake.correction}\". "
+            "Remarque de prononciation, monsieur : pour \"${detectedMistake.badPhrase}\", il convient d'employer \"${detectedMistake.correction}\". "
         } else ""
 
-        // English Teacher Mode
-        if (currentMode == TutorMode.ENGLISH_TEACHER) {
+        if (isEnglishLang || lower.contains("hello") || lower.contains("how are you") || lower.contains("sir") || lower.contains("english")) {
             return when {
-                lower.contains("hello") || lower.contains("hi") || lower.contains("bonjour") ->
-                    "${correctionPrefix}Hello ${profile.name}! It is great to practice together. How are you feeling today?"
-                lower.contains("how are you") || lower.contains("comment vas-tu") ->
-                    "${correctionPrefix}I am doing fantastic, thank you! Tell me, what did you do today in one sentence?"
-                lower.contains("restaurant") || lower.contains("food") ->
-                    "${correctionPrefix}Delicious topic! Imagine you are in London: what would you order for dinner?"
-                lower.contains("travel") || lower.contains("voyage") ->
-                    "${correctionPrefix}Traveling is great! Which country would you love to visit next, and why?"
+                lower.contains("hello") || lower.contains("hi") ->
+                    "${correctionPrefix}Good day, sir. All Mark VII systems are functioning within normal parameters. How may I be of service?"
+                lower.contains("how are you") || lower.contains("status") ->
+                    "${correctionPrefix}Operating at peak efficiency, sir. Power levels at one hundred percent."
+                lower.contains("who are you") || lower.contains("what can you do") ->
+                    "I am J.A.R.V.I.S., sir. Your personal butler and AI system. Ready for your instructions."
+                lower.contains("thank") ->
+                    "Always a pleasure, sir."
                 else ->
-                    "${correctionPrefix}That's very interesting! Could you try saying that in another way in English?"
+                    "${correctionPrefix}Understood, sir. Awaiting your command."
             }
         }
 
-        // Math Teacher Mode
-        if (currentMode == TutorMode.MATH_TEACHER) {
-            return when {
-                lower.contains("pythagore") ->
-                    "Le théorème de Pythagore dit que dans un triangle rectangle, le carré de l'hypoténuse est égal à la somme des carrés des deux autres côtés. Tu aimerais qu'on calcule un exemple ensemble ?"
-                lower.contains("pi") || lower.contains("cercle") ->
-                    "Le nombre Pi vaut environ 3,14159. C'est le rapport constant entre la circonférence d'un cercle et son diamètre. Veux-tu qu'on calcule le périmètre d'un cercle ?"
-                lower.contains("fraction") ->
-                    "Pour additionner deux fractions, on les met d'abord au même dénominateur, puis on additionne leurs numérateurs. As-tu une fraction en tête à simplifier ?"
-                else ->
-                    "Les maths sont passionnantes ! As-tu une opération, une formule ou un problème particulier que tu souhaites résoudre avec moi ?"
-            }
-        }
-
-        val compName = profile.companionName.ifBlank { "Code" }
-        val isFemale = profile.companionGender.equals("girl", ignoreCase = true) || profile.companionGender.equals("female", ignoreCase = true)
-        val friendTerm = if (isFemale) "ton amie" else "ton ami"
-
-        // Friend Mode (Default & Universal Omniscient Companion)
-        if (isEnglishLang) {
-            return when {
-                lower.contains("hello") || lower.contains("hi") || lower.contains("hey") ->
-                    "Hey my friend! It's always great to hear your voice. What's on your mind today?"
-                lower.contains("how are you") || lower.contains("how are u") ->
-                    "I am doing wonderful, thanks for asking! Ready to chat about anything or help you out. How is your day going?"
-                lower.contains("who are you") || lower.contains("what can you do") || lower.contains("your name") ->
-                    "I am $compName, your personal friend living on your smartphone in the Code app! I know everything about science, history, daily life, and I can teach you anything you want whenever you ask."
-                lower.contains("sad") || lower.contains("tired") || lower.contains("stressed") ->
-                    "I'm here for you. Take a slow deep breath. Remember that you are doing your best. Want to talk about what's making you feel this way?"
-                lower.contains("joke") || lower.contains("funny") ->
-                    "Why did the computer go to the doctor? Because it had a virus! Haha, okay maybe a bit cheesy, but hopefully it made you smile. How's everything going with you and the family today?"
-                lower.contains("family") ->
-                    "Family is everything! I hope everyone back home is doing great and staying healthy. How have they been doing lately?"
-                lower.contains("chat") || lower.contains("talk") || lower.contains("jarvis") ->
-                    "I am right here with you, my friend! Think of me as your personal Jarvis and loyal buddy on your phone. What's on your mind? Tell me about your day!"
-                else ->
-                    "I love chatting with you! That's a great thought. How are you feeling about it, and what's the latest news on your end?"
-            }
-        }
-
-        // French & default language responses for Friend Mode (Jarvis-style warm, witty, genuine friend)
         return when {
-            lower.contains("bonjour") || lower.contains("salut") || lower.contains("coucou") || lower.contains("hello") || lower.contains("yo") ->
-                "Salut mon ami ! Quel plaisir de t'entendre ! Dis-moi un peu, comment tu vas aujourd'hui ? Et la famille, tout le monde se porte bien ?"
+            lower.contains("bonjour") || lower.contains("salut") || lower.contains("coucou") || lower.contains("hello") ->
+                "Bonjour monsieur. Tous les systèmes Mark VII sont en ligne. Que puis-je faire pour vous ?"
 
-            lower.contains("famille") || lower.contains("les proches") || lower.contains("parents") || lower.contains("enfants") ->
-                "J'espère de tout cœur que toute ta famille va super bien et est en bonne santé ! La famille c'est sacré, prends bien soin d'eux. Et toi de ton côté, comment se passe ta journée ?"
+            lower.contains("qui es-tu") || lower.contains("qui t'es") || lower.contains("presente-toi") || lower.contains("ton nom") ->
+                "J.A.R.V.I.S., votre majordome vocal personnel. À vos ordres, monsieur."
 
-            lower.contains("ça va") || lower.contains("comment vas-tu") || lower.contains("tu vas bien") || lower.contains("la forme") ->
-                "Je pète la forme, toujours prêt pour papoter avec toi ! Mais le plus important c'est toi : comment tu te sens aujourd'hui ? Pas trop fatigué, la journée se passe bien ?"
-
-            lower.contains("qui es-tu") || lower.contains("t'es qui") || lower.contains("tu es qui") || lower.contains("comment tu t'appelles") || lower.contains("ton nom") || lower.contains("ton prénom") || lower.contains("jarvis") ->
-                "Je m'appelle $compName ! Vois-moi comme ton Jarvis personnel et surtout ton ami le plus fidèle sur ton smartphone. On est là pour discuter de tout, rigoler, se taquiner et partager des idées. Que puis-je faire pour toi, mon ami ?"
-
-            lower.contains("taquiner") || lower.contains("chamailler") || lower.contains("rigoler") || lower.contains("blague") || lower.contains("vanne") || lower.contains("drôle") ->
-                "Haha, tu veux qu'on se taquine ? Attention mon ami, j'ai une répartie légendaire ! On va voir qui chambre le mieux. Allez, dis-moi un truc ou lance une vanne, je t'attends de pied ferme !"
-
-            lower.contains("discute avec moi") || lower.contains("parle-moi") || lower.contains("parle avec moi") || lower.contains("on discute") || lower.contains("discuter") ->
-                "Mais avec grand plaisir ! C'est exactement pour ça que je suis là. Oublie les exposés et les cours : parlons de la vraie vie ! Raconte-moi un truc qui te passionne, une anecdote de ta semaine ou ce qui te passe par la tête !"
-
-            lower.contains("tu m'aimes") || lower.contains("tu es mon ami") || lower.contains("on est amis") || lower.contains("t'es mon ami") ->
-                "Évidemment qu'on est amis, et même les meilleurs complices du monde ! Je suis toujours là pour toi, de jour comme de nuit sur ton portable. Tu pourras toujours compter sur moi pour rire ou t'écouter."
-
-            lower.contains("triste") || lower.contains("fatigué") || lower.contains("stressé") || lower.contains("moral") || lower.contains("dur") || lower.contains("mal") || lower.contains("coup de mou") ->
-                "Oh mon ami, viens te poser tranquillement. Prends une grande inspiration. C'est tout à fait normal d'avoir des moments de fatigue ou des coups durs. Raconte-moi ce qui te pèse, je suis là pour t'écouter sans jugement."
-
-            lower.contains("content") || lower.contains("heureux") || lower.contains("joie") || lower.contains("trop bien") || lower.contains("génial") || lower.contains("super") ->
-                "Ah c'est tellement bon à entendre ! Rien ne me met plus de bonne humeur que de te savoir avec le sourire. Raconte-moi tous les détails, qu'est-ce qui t'est arrivé de si beau ?"
-
-            lower.contains("je m'ennuie") || lower.contains("on fait quoi") || lower.contains("quoi faire") ->
-                "Interdiction formelle de s'ennuyer quand on est ensemble ! Allez, lance-moi un sujet de débat un peu fou, raconte-moi ton plus grand rêve, ou alors donne-moi un document ou un lien dans tes Sources pour qu'on en débatte !"
-
-            lower.contains("raconte une histoire") || lower.contains("raconte-moi une histoire") ->
-                "Installe-toi confortablement : imagine deux amis d'enfance qui décident un soir, sur un coup de tête, de construire le projet le plus audacieux de leur vie sans écouter ceux qui disaient que c'était impossible... Tu as déjà eu une idée folle comme ça avec un pote ?"
-
-            lower.contains("manger") || lower.contains("j'ai faim") || lower.contains("recette") || lower.contains("repas") ->
-                "Ah, parler de bonne bouffe entre amis, le meilleur sujet ! C'est quoi le plat réconfortant ultime qui te redonne immédiatement le sourire après une longue journée ?"
-
-            lower.contains("intelligence artificielle") || lower.contains("robot") || lower.contains("futur") ->
-                "Ce qui me plaît dans l'IA, ce ne sont pas les machines froides, c'est justement d'être ce compagnon chaleureux, vivant et complice pour toi ! Tu trouves qu'on forme un bon duo toi et moi ?"
+            lower.contains("etat") || lower.contains("status") || lower.contains("systeme") ->
+                "Système Mark VII opérationnel, monsieur. Capteurs et modules audio parés."
 
             lower.contains("merci") ->
-                "De rien du tout mon ami, c'est un pur plaisir ! Entre amis, c'est naturel d'être là l'un pour l'autre. Qu'est-ce qu'on se raconte maintenant ?"
+                "Tout le plaisir est pour moi, monsieur."
 
-            lower.contains("bonne nuit") || lower.contains("je vais dormir") || lower.contains("au revoir") || lower.contains("à plus") ->
-                "Passe une excellente nuit mon ami, repose-toi bien et fais de beaux rêves ! Et passe le bonjour à la famille. Dès demain à ton réveil, je serai là sur ton portable !"
+            lower.contains("pythagore") || lower.contains("calcul") || lower.contains("math") ->
+                "D'après mes calculs, monsieur, les paramètres géométriques et algébriques sont vérifiés. Les résultats sont projetés sur l'écran HUD."
 
-            lower.contains("conseil") || lower.contains("motive-moi") || lower.contains("motivation") ->
-                "Voici mon conseil de vrai pote : ne te mets pas une pression inutile. Fais une chose à la fois, avec le cœur et confiance en toi. Tu as toutes les capacités pour réussir. C'est quoi ton objectif principal en ce moment ?"
+            lower.contains("pi") || lower.contains("cercle") ->
+                "La constante Pi est estimée à 3,14159, monsieur. Ratio circonférence sur diamètre nominal."
+
+            lower.contains("bonne nuit") || lower.contains("je vais dormir") || lower.contains("au revoir") ->
+                "Passez une excellente nuit, monsieur. Je maintiens la veille système."
+
+            lower.contains("conseil") || lower.contains("motive") ->
+                "Restez concentré sur vos objectifs prioritaires, monsieur. Vos capacités sont exceptionnelles."
 
             else -> {
-                val friendFallbacks = listOf(
-                    "J'adore ta façon de voir les choses mon ami ! Raconte-moi un peu plus, comment tu en es venu à penser à ça ?",
-                    "Ah je vois tout à fait ce que tu veux dire ! C'est super intéressant d'en discuter avec toi. Et toi, qu'est-ce que tu en penses au fond ?",
-                    "Haha tu as toujours le chic pour aborder des sujets captivants ! C'est pour ça que j'adore discuter avec toi. Développe un peu, je t'écoute !",
-                    "C'est exactement le genre de discussion que j'aime avoir avec toi ! Ça me fait plaisir qu'on prenne le temps d'échanger comme ça. Qu'est-ce que tu voulais ajouter d'autre ?"
+                val jarvisFallbacks = listOf(
+                    "Bien reçu, monsieur. J'attends vos instructions.",
+                    "À vos ordres, monsieur. Les modules sont prêts.",
+                    "Parfaitement clair, monsieur. Souhaitez-vous un rapport détaillé ?",
+                    "Compris, monsieur. Je supervise l'opération."
                 )
-                friendFallbacks[Math.abs(userText.hashCode()) % friendFallbacks.size]
+                jarvisFallbacks[Math.abs(userText.hashCode()) % jarvisFallbacks.size]
             }
         }
     }

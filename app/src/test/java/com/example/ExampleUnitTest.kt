@@ -10,8 +10,25 @@ import org.junit.Test
 class ExampleUnitTest {
     @Test
     fun testTutorModesConfigured() {
-        assertEquals(4, TutorMode.values().size)
-        assertEquals("Professeur d'anglais", TutorMode.ENGLISH_TEACHER.title)
+        assertEquals(1, TutorMode.values().size)
+        assertEquals("J.A.R.V.I.S.", TutorMode.JARVIS.title)
+    }
+
+    @Test
+    fun testJarvisVoiceCommandsAndReport() {
+        val jarvisModeCmd = com.example.voice.VoiceCommandManager.parse("Mode JARVIS")
+        assertTrue(jarvisModeCmd is com.example.voice.VoiceCommandResult.SwitchToJarvis)
+
+        val openAppCmd = com.example.voice.VoiceCommandManager.parse("Ouvre YouTube")
+        assertTrue(openAppCmd is com.example.voice.VoiceCommandResult.OpenApp)
+        assertEquals("YouTube", (openAppCmd as com.example.voice.VoiceCommandResult.OpenApp).appName)
+
+        val openUrlCmd = com.example.voice.VoiceCommandManager.parse("Ouvre https://mail.google.com")
+        assertTrue(openUrlCmd is com.example.voice.VoiceCommandResult.OpenUrl)
+        assertEquals("https://mail.google.com", (openUrlCmd as com.example.voice.VoiceCommandResult.OpenUrl).url)
+
+        val cancelCmd = com.example.voice.VoiceCommandManager.parse("Annule la tâche")
+        assertTrue(cancelCmd is com.example.voice.VoiceCommandResult.CancelTask)
     }
 
     @Test
@@ -42,31 +59,31 @@ class ExampleUnitTest {
 
     @Test
     fun testGeminiInstructionEngine() {
-        val profile = com.example.data.model.UserProfile(name = "Alex", level = "B2", companionName = "Léo", companionGender = "boy")
+        val profile = com.example.data.model.UserProfile(name = "Alex", level = "B2")
         val lang = com.example.data.model.AppLanguage.findByCode("fr-FR")
         val instruction = com.example.engine.GeminiInstructionEngine.buildSystemInstruction(
-            mode = com.example.data.model.TutorMode.ENGLISH_TEACHER,
+            mode = com.example.data.model.TutorMode.JARVIS,
             profile = profile,
             language = lang
         )
         assertTrue(instruction.contains("Alex"))
-        assertTrue(instruction.contains("Léo"))
-        assertTrue(instruction.contains("figure masculine"))
-        assertTrue(instruction.contains("Code"))
-        assertTrue(instruction.contains("Franchement"))
+        assertTrue(instruction.contains("J.A.R.V.I.S."))
+        assertTrue(instruction.contains("monsieur"))
+        assertTrue(instruction.contains("BRITANNIQUE"))
     }
 
     @Test
-    fun testCompanionGirlPersona() {
-        val profile = com.example.data.model.UserProfile(name = "Max", level = "B1", companionName = "Lina", companionGender = "girl")
+    fun testJarvisInstructionPersona() {
+        val profile = com.example.data.model.UserProfile(name = "Tony", level = "B1")
         val lang = com.example.data.model.AppLanguage.findByCode("fr-FR")
         val instruction = com.example.engine.GeminiInstructionEngine.buildSystemInstruction(
-            mode = com.example.data.model.TutorMode.FRIEND,
+            mode = com.example.data.model.TutorMode.JARVIS,
             profile = profile,
             language = lang
         )
-        assertTrue(instruction.contains("Lina"))
-        assertTrue(instruction.contains("figure féminine"))
+        assertTrue(instruction.contains("Tony"))
+        assertTrue(instruction.contains("Mark VII"))
+        assertTrue(instruction.contains("HUD"))
     }
 
     @Test

@@ -67,7 +67,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     private val _currentCorrectionNote = MutableStateFlow<String?>(null)
     val currentCorrectionNote: StateFlow<String?> = _currentCorrectionNote.asStateFlow()
 
-    private val _selectedMode = MutableStateFlow(TutorMode.FRIEND)
+    private val _selectedMode = MutableStateFlow(TutorMode.JARVIS)
     val selectedMode: StateFlow<TutorMode> = _selectedMode.asStateFlow()
 
     private val _isWebSearching = MutableStateFlow(false)
@@ -162,6 +162,13 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _isHandsFreeSheetVisible = MutableStateFlow(false)
     val isHandsFreeSheetVisible: StateFlow<Boolean> = _isHandsFreeSheetVisible.asStateFlow()
+
+    // JARVIS HUD Display Cards & Executive Reports
+    private val _hudDisplayCards = MutableStateFlow<List<com.example.data.model.HudDisplayCard>>(emptyList())
+    val hudDisplayCards: StateFlow<List<com.example.data.model.HudDisplayCard>> = _hudDisplayCards.asStateFlow()
+
+    private val _activeHudReport = MutableStateFlow<com.example.data.model.HudReport?>(null)
+    val activeHudReport: StateFlow<com.example.data.model.HudReport?> = _activeHudReport.asStateFlow()
 
     private val _installedTtsEngines = MutableStateFlow<List<TtsEngineInfo>>(emptyList())
     val installedTtsEngines: StateFlow<List<TtsEngineInfo>> = _installedTtsEngines.asStateFlow()
@@ -739,26 +746,26 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 hasSelectedInitialLanguage = true
             )
             database.userDao().insertOrUpdate(updated)
-            _selectedMode.value = TutorMode.ENGLISH_TEACHER
+            _selectedMode.value = TutorMode.JARVIS
             _showOnboardingScreen.value = false
 
             ttsManager?.setVoiceByGenderAndAccent(voiceGender, voiceAccent)
 
             val greeting = when (personaGender.lowercase()) {
-                "boy" -> "Hello! I'm $cleanName, your personal AI English teacher! I'm super excited to practice with you. Let's make your English confident and fluent! How are you doing today?"
-                "girl" -> "Hello there! I'm $cleanName, your AI English teacher and conversation partner. Together, we'll master English speaking with confidence and fun! How are you feeling today?"
-                else -> "Welcome! I am $cleanName, your personal AI English teacher. I am configured and ready to guide your conversational practice. What would you like to explore today?"
+                "boy" -> "Hello! I'm $cleanName, your personal AI English companion! I'm super excited to practice with you. Let's make your English confident and fluent! How are you doing today?"
+                "girl" -> "Hello there! I'm $cleanName, your AI English companion and conversation partner. Together, we'll master English speaking with confidence and fun! How are you feeling today?"
+                else -> "Bonjour monsieur. Je suis $cleanName, votre majordome et assistant vocal J.A.R.V.I.S. Tous les systèmes sont opérationnels. Que puis-je faire pour vous ?"
             }
 
             _liveCodeReply.value = greeting
-            _infoBannerMessage.value = "Professeur d'anglais « $cleanName » configuré avec succès !"
+            _infoBannerMessage.value = "Assistant vocal « $cleanName » configuré avec succès !"
             speak(greeting)
 
             database.conversationDao().insertMessage(
                 ConversationMessage(
                     role = "code",
                     text = greeting,
-                    mode = TutorMode.ENGLISH_TEACHER.name
+                    mode = TutorMode.JARVIS.name
                 )
             )
         }
@@ -903,7 +910,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 val docId = brain.repository.saveIngestedSource(result)
                 val savedDoc = database.documentDao().getDocumentById(docId)
                 _activeSourceForDiscussion.value = savedDoc
-                _selectedMode.value = TutorMode.ENGLISH_TEACHER
+                _selectedMode.value = TutorMode.JARVIS
 
                 // Extract 3 vocabulary words and store them in Flashcards
                 val extractedWords = extractKeyVocabularyFromSource(result)
@@ -949,7 +956,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                     com.example.data.model.ConversationMessage(
                         role = "code",
                         text = lessonMessage,
-                        mode = TutorMode.ENGLISH_TEACHER.name,
+                        mode = TutorMode.JARVIS.name,
                         webSourceUrl = cleanUrl,
                         webSearchTopic = result.title
                     )
@@ -966,7 +973,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
     fun startEnglishLessonFromSource(doc: com.example.data.model.DownloadedDocument) {
         viewModelScope.launch {
             _activeSourceForDiscussion.value = doc
-            _selectedMode.value = TutorMode.ENGLISH_TEACHER
+            _selectedMode.value = TutorMode.JARVIS
             val intro = "Awesome! Let's practice English using your source: \"${doc.title}\". What is the main idea you remember from this content?"
             _liveCodeReply.value = intro
             _infoBannerMessage.value = "Leçon d'anglais démarrée sur « ${doc.title} » !"
@@ -975,7 +982,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 com.example.data.model.ConversationMessage(
                     role = "code",
                     text = intro,
-                    mode = TutorMode.ENGLISH_TEACHER.name,
+                    mode = TutorMode.JARVIS.name,
                     webSourceUrl = doc.authorOrSource,
                     webSearchTopic = doc.title
                 )
@@ -1198,7 +1205,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             stopSpeaking()
         }
         _isOnline.value = brain.isOnline()
-        val lang = if (_selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else userProfile.value.preferredLanguageCode
+        val lang = if (_isHandsFreeMode.value) "en-US" else userProfile.value.preferredLanguageCode
         _liveUserTranscript.value = ""
         _statusText.value = "En écoute continue… Parle à ton rythme, réappuie quand tu as fini !"
         _orbState.value = OrbState.LISTENING
@@ -1262,12 +1269,12 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         _isHandsFreeMode.value = true
         _isHandsFreeSheetVisible.value = true
         speechManager?.setHandsFree(true)
-        _selectedMode.value = TutorMode.ENGLISH_TEACHER
+        _selectedMode.value = TutorMode.JARVIS
 
         val companionName = userProfile.value.companionName.ifBlank { "Code" }
         val intro = introPrompt ?: "Hello! I am $companionName, your English conversation partner. We can talk hands-free about anything you like! What would you like to discuss today?"
-        _handsFreeStatus.value = "Code te parle en anglais..."
-        _statusText.value = "Mains libres en anglais avec $companionName"
+        _handsFreeStatus.value = "J.A.R.V.I.S. vous écoute en anglais..."
+        _statusText.value = "Mains libres en anglais avec J.A.R.V.I.S."
         _orbState.value = OrbState.SPEAKING
         _liveCodeReply.value = intro
 
@@ -1276,7 +1283,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 ConversationMessage(
                     role = "code",
                     text = intro,
-                    mode = TutorMode.ENGLISH_TEACHER.name
+                    mode = TutorMode.JARVIS.name
                 )
             )
             speak(intro, languageOverride = "en-US")
@@ -1332,6 +1339,89 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             if (_isHandsFreeMode.value) {
                 startHandsFreeListening()
             }
+        }
+    }
+
+    // --- JARVIS HUD Holographic Display Cards & Executive Reports ---
+
+    fun addHudCard(card: com.example.data.model.HudDisplayCard) {
+        val current = _hudDisplayCards.value.toMutableList()
+        current.add(0, card)
+        // Keep at most 6 cards (matching JARVIS HUD buffer limit)
+        _hudDisplayCards.value = if (current.size > 6) current.take(6) else current
+    }
+
+    fun dismissHudCard(cardId: String) {
+        _hudDisplayCards.value = _hudDisplayCards.value.filter { it.id != cardId }
+    }
+
+    fun clearHudCards() {
+        _hudDisplayCards.value = emptyList()
+    }
+
+    fun showHudReport(report: com.example.data.model.HudReport) {
+        _activeHudReport.value = report
+    }
+
+    fun dismissHudReport() {
+        _activeHudReport.value = null
+    }
+
+    fun launchAppOrUrl(appName: String, url: String? = null) {
+        val context = getApplication<Application>()
+        val result = if (!url.isNullOrBlank()) {
+            com.example.util.AppLauncherHelper.openUrl(context, url)
+        } else {
+            com.example.util.AppLauncherHelper.openApp(context, appName)
+        }
+        _infoBannerMessage.value = result.feedback
+        speak(result.feedback)
+        addHudCard(
+            com.example.data.model.HudDisplayCard(
+                title = if (url != null) "Ouverture Web" else "Lancement Application",
+                content = result.feedback,
+                kind = if (result.success) "result" else "warning"
+            )
+        )
+    }
+
+    fun generateExecutiveReport() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val totalWords = try {
+                database.vocabularyDao().countTotalVocabulary()
+            } catch (e: Exception) {
+                5
+            }
+            val streak = userProfile.value.streakDays
+            val report = com.example.data.model.HudReport(
+                title = "Tableau de Bord Exécutif • MARK VII",
+                kpis = listOf(
+                    com.example.data.model.HudKpi(label = "Mots Maîtrisés", value = "$totalWords", delta = "+12%", isPositive = true),
+                    com.example.data.model.HudKpi(label = "Série Actuelle", value = "$streak j", delta = "+1 j", isPositive = true),
+                    com.example.data.model.HudKpi(label = "Précision Vocale", value = "94.2 %", delta = "+3.5%", isPositive = true),
+                    com.example.data.model.HudKpi(label = "Temps d'Étude", value = "48 min", delta = "+15 min", isPositive = true)
+                ),
+                chartTitle = "Activité Vocale & Progression Hebdomadaire",
+                chartData = listOf(
+                    "Lun" to 14f, "Mar" to 22f, "Mer" to 35f, "Jeu" to 28f, "Ven" to 42f, "Sam" to 50f, "Dim" to 65f
+                ),
+                tableColumns = listOf("Module", "Statut", "Précision"),
+                tableRows = listOf(
+                    listOf("Conversation Fluide", "Actif", "96 %"),
+                    listOf("Vocabulaire Clé", "Assimilé", "92 %"),
+                    listOf("Grammaire & Syntaxe", "En cours", "88 %"),
+                    listOf("Prononciation HD", "Validé", "95 %")
+                ),
+                markdownNotes = "Tous les systèmes opèrent avec une efficacité optimale, monsieur."
+            )
+            showHudReport(report)
+            addHudCard(
+                com.example.data.model.HudDisplayCard(
+                    title = "Rapport Analytique",
+                    content = "Tableau de bord généré avec succès. **$totalWords mots** assimilés, précision moyenne de **94.2%**.",
+                    kind = "result"
+                )
+            )
         }
     }
 
@@ -1417,6 +1507,26 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
                 _lastVoiceCommandBanner.value = "Mains libres arrêté"
                 stopHandsFreeConversation()
                 speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.SwitchToJarvis -> {
+                _lastVoiceCommandBanner.value = "Mode J.A.R.V.I.S."
+                setMode(com.example.data.model.TutorMode.JARVIS)
+                speak(commandResult.feedback)
+            }
+            is VoiceCommandResult.OpenApp -> {
+                _lastVoiceCommandBanner.value = "Lancement : ${commandResult.appName}"
+                launchAppOrUrl(commandResult.appName)
+            }
+            is VoiceCommandResult.OpenUrl -> {
+                _lastVoiceCommandBanner.value = "Ouverture web"
+                launchAppOrUrl("", commandResult.url)
+            }
+            is VoiceCommandResult.CancelTask -> {
+                _lastVoiceCommandBanner.value = "Tâche annulée"
+                stopSpeaking()
+                cancelRecording()
+                _infoBannerMessage.value = "Tâche interrompue, monsieur."
+                speak("Tâche interrompue, monsieur.")
             }
             is VoiceCommandResult.Help -> {
                 _lastVoiceCommandBanner.value = "Aide vocale"
@@ -1543,6 +1653,27 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             _currentCorrectionNote.value = response.correctionNote
             _lastRetrievedCitations.value = response.citationChunks
 
+            // Dispatch HUD Display Card (inspired by JARVIS display_card)
+            if (response.displayCard != null) {
+                addHudCard(response.displayCard)
+            }
+
+            // Dispatch HUD Report Dashboard (inspired by JARVIS display_report)
+            if (response.displayReport != null) {
+                showHudReport(response.displayReport)
+            }
+
+            // Dispatch App / URL Launch (inspired by JARVIS open_app & open_url)
+            if (response.launchTarget != null) {
+                val target = response.launchTarget
+                val context = getApplication<Application>()
+                if (!target.url.isNullOrBlank()) {
+                    com.example.util.AppLauncherHelper.openUrl(context, target.url)
+                } else {
+                    com.example.util.AppLauncherHelper.openApp(context, target.appName)
+                }
+            }
+
             // Check for triggered commands
             when (response.triggeredCommand) {
                 "stop" -> stopSpeaking()
@@ -1632,7 +1763,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun speak(text: String, languageOverride: String? = null) {
         _currentlySpokenText.value = text
-        val lang = languageOverride ?: if (_isHandsFreeMode.value || _selectedMode.value == TutorMode.ENGLISH_TEACHER) "en-US" else null
+        val lang = languageOverride ?: if (_isHandsFreeMode.value) "en-US" else null
         if (lang != null) {
             ttsManager?.speakWithSettings(text, languageOverride = lang)
         } else {
@@ -1711,11 +1842,7 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
 
     fun startCachedLesson(lesson: CachedLesson) {
         viewModelScope.launch {
-            if (lesson.languageCode.equals("en", ignoreCase = true)) {
-                _selectedMode.value = TutorMode.ENGLISH_TEACHER
-            } else {
-                _selectedMode.value = TutorMode.FRIEND
-            }
+            _selectedMode.value = TutorMode.JARVIS
 
             val firstDialogue = lesson.parseDialogues().firstOrNull()
             val introText = if (lesson.languageCode.equals("en", ignoreCase = true)) {

@@ -167,6 +167,7 @@ fun ConversationScreen(
     val lastVoiceCommandBanner by viewModel.lastVoiceCommandBanner.collectAsState()
     val isHandsFreeMode by viewModel.isHandsFreeMode.collectAsState()
     val isHandsFreeSheetVisible by viewModel.isHandsFreeSheetVisible.collectAsState()
+    val hudDisplayCards by viewModel.hudDisplayCards.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
     var showAddSourceDialog by remember { mutableStateOf(false) }
@@ -207,6 +208,44 @@ fun ConversationScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
+        // --- JARVIS Mark VII HUD Corner Brackets ---
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(6.dp)
+                .size(20.dp)
+        ) {
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(0f, size.height), strokeWidth = 2.dp.toPx())
+        }
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(6.dp)
+                .size(20.dp)
+        ) {
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(size.width, 0f), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+        }
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(6.dp)
+                .size(20.dp)
+        ) {
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, size.height), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(0f, size.height), strokeWidth = 2.dp.toPx())
+        }
+        androidx.compose.foundation.Canvas(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(6.dp)
+                .size(20.dp)
+        ) {
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, size.height), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(size.width, 0f), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -381,6 +420,44 @@ fun ConversationScreen(
                     }
                 }
 
+                // J.A.R.V.I.S. Mode Button (Iron Man Mark VII Butler)
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .defaultMinSize(minWidth = 56.dp)
+                        .clip(RoundedCornerShape(14.dp))
+                        .clickable { viewModel.setMode(com.example.data.model.TutorMode.JARVIS) }
+                        .testTag("top_jarvis_mode_button"),
+                    color = if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan.copy(alpha = 0.3f) else DarkSurfaceVariant,
+                    shape = RoundedCornerShape(14.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan else DarkCardBorder
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Hub,
+                            contentDescription = "Mode J.A.R.V.I.S.",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (currentMode == com.example.data.model.TutorMode.JARVIS) "J.A.R.V.I.S. Actif" else "J.A.R.V.I.S.",
+                            color = if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan else TextPrimary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
+                }
+
+
                 // Flashcards Review Button
                 Surface(
                     modifier = Modifier
@@ -517,39 +594,6 @@ fun ConversationScreen(
                     }
                 }
 
-                // Prononciation Guidance Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showPronunciationDialog() }
-                        .testTag("top_pronunciation_guide_button"),
-                    color = NeonMagenta.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonMagenta.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.RecordVoiceOver,
-                            contentDescription = "Prononciation",
-                            tint = NeonMagenta,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Prononciation",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
 
                 // Auto-Speech / TTS Toggle
                 Surface(
@@ -747,6 +791,44 @@ fun ConversationScreen(
                 }
             }
 
+            // JARVIS Holographic HUD Cards Stream (display_card)
+            if (hudDisplayCards.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "CARTES HUD (${hudDisplayCards.size})",
+                            color = NeonCyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Effacer tout",
+                            color = TextMuted,
+                            fontSize = 10.sp,
+                            modifier = Modifier
+                                .clickable { viewModel.clearHudCards() }
+                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                    for (card in hudDisplayCards.take(2)) {
+                        com.example.ui.components.HudDisplayCardView(
+                            card = card,
+                            onDismiss = { viewModel.dismissHudCard(card.id) }
+                        )
+                    }
+                }
+            }
+
             // Active Source Grounding Card (NotebookLM Mode)
             activeSource?.let { src ->
                 Surface(
@@ -826,16 +908,14 @@ fun ConversationScreen(
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val quickIdeas = listOf(
-                    "🗣️ Comment prononcer Comfortable ?",
-                    "🎙️ Guide de prononciation anglaise",
-                    "🐢 Prononce Thoroughly au ralenti",
+                    "🤖 Statut système Mark VII",
+                    "🚀 Ouvre YouTube",
+                    "🎵 Lance Spotify",
+                    "🌐 Ouvre mes e-mails",
+                    "🔍 Recherche les actus IA",
                     "📚 Interroger mes sources (NotebookLM)",
-                    "📁 De quoi parlent mes sources ?",
-                    "👋 Salut mon ami ! Comment tu vas ?",
-                    "👨‍👩‍👧 Comment va la famille chez toi ?",
-                    "😂 Raconte-moi une blague !",
-                    "🥊 Allez, viens on se taquine un peu !",
-                    "💭 Tu penses quoi de l'avenir ?"
+                    "⚡ Analyse et calculs",
+                    "❌ Annule la tâche"
                 )
                 quickIdeas.forEach { idea ->
                     Surface(
