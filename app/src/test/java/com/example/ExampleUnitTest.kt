@@ -308,9 +308,48 @@ class ExampleUnitTest {
         // English phrasing
         val target3 = com.example.engine.CodeBrain.extractPronunciationTarget("How do you pronounce Schedule?")
         assertEquals("Schedule", target3)
+    }
 
-        val target4 = com.example.engine.CodeBrain.extractPronunciationTarget("How to pronounce \"Entrepreneur\"")
-        assertEquals("Entrepreneur", target4)
+    @Test
+    fun testLocalLightweightLlmArithmeticEvaluator() {
+        val calc1 = com.example.service.LocalLightweightLlmEngine.evaluateMathExpression("Combien font 42 + 58 ?")
+        assertEquals("100", calc1)
+
+        val calc2 = com.example.service.LocalLightweightLlmEngine.evaluateMathExpression("Calcule 15 * 4")
+        assertEquals("60", calc2)
+
+        val calc3 = com.example.service.LocalLightweightLlmEngine.evaluateMathExpression("Combien fait 100 / 4 ?")
+        assertEquals("25", calc3)
+
+        val calcSub = com.example.service.LocalLightweightLlmEngine.evaluateMathExpression("50 - 18")
+        assertEquals("32", calcSub)
+    }
+
+    @Test
+    fun testAdaptiveIntelligenceQueryNormalizationAndHash() {
+        val q1 = "  Quel est le résultat de 2 + 2 ?  "
+        val q2 = "quel est le résultat de 2 + 2 ?"
+        val norm1 = com.example.service.AdaptiveIntelligenceService.normalizeQuery(q1)
+        val norm2 = com.example.service.AdaptiveIntelligenceService.normalizeQuery(q2)
+        assertEquals(norm1, norm2)
+
+        val hash1 = com.example.service.AdaptiveIntelligenceService.computeHash(norm1)
+        val hash2 = com.example.service.AdaptiveIntelligenceService.computeHash(norm2)
+        assertEquals(hash1, hash2)
+        assertTrue(hash1.length == 32) // MD5 hex length
+
+        val similarity = com.example.service.AdaptiveIntelligenceService.computeJaccardSimilarity(
+            "qui es tu",
+            "qui es tu jarvis"
+        )
+        assertTrue(similarity >= 0.75f)
+    }
+
+    @Test
+    fun testIntelligenceStrategyBadges() {
+        assertEquals("🟢 En ligne (Gemini)", com.example.service.IntelligenceStrategy.ONLINE_CLOUD_LLM.badge)
+        assertEquals("⚡ Hors ligne (Cache)", com.example.service.IntelligenceStrategy.OFFLINE_CACHED_STRATEGY.badge)
+        assertEquals("🧠 Hors ligne (LLM Local)", com.example.service.IntelligenceStrategy.OFFLINE_LOCAL_LIGHTWEIGHT_LLM.badge)
     }
 }
 

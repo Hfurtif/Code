@@ -263,7 +263,23 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
 
+    val intelligenceStrategy = brain.adaptiveIntelligenceService.currentStrategy
+    val cacheStats = brain.adaptiveIntelligenceService.cacheStats
+    val networkStatus = brain.adaptiveIntelligenceService.connectivityService.networkStatus
+
     init {
+        // Continuous Network Connectivity Observation
+        viewModelScope.launch {
+            brain.adaptiveIntelligenceService.connectivityService.networkStatus.collect { status ->
+                _isOnline.value = status.isOnline
+                if (!status.isOnline && _orbState.value == OrbState.IDLE) {
+                    _orbState.value = OrbState.OFFLINE
+                } else if (status.isOnline && _orbState.value == OrbState.OFFLINE) {
+                    _orbState.value = OrbState.IDLE
+                }
+            }
+        }
+
         // Initial online check
         _isOnline.value = brain.isOnline()
         if (!_isOnline.value) {
@@ -2023,6 +2039,13 @@ class CodeViewModel(application: Application) : AndroidViewModel(application) {
             _liveCodeReply.value = ""
             _liveUserTranscript.value = ""
             _infoBannerMessage.value = "Historique effacé avec succès."
+        }
+    }
+
+    fun clearResponseCache() {
+        viewModelScope.launch {
+            brain.adaptiveIntelligenceService.clearCache()
+            _infoBannerMessage.value = "Cache des réponses hors-ligne réinitialisé."
         }
     }
 

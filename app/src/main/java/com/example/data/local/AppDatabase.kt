@@ -31,9 +31,10 @@ import kotlinx.coroutines.launch
         DownloadedDocument::class,
         com.example.data.model.NotebookNote::class,
         com.example.data.model.StudioArtifact::class,
-        com.example.data.model.CachedLesson::class
+        com.example.data.model.CachedLesson::class,
+        com.example.data.model.CachedQueryResponse::class
     ],
-    version = 10,
+    version = 11,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -49,6 +50,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun notebookNoteDao(): NotebookNoteDao
     abstract fun studioArtifactDao(): StudioArtifactDao
     abstract fun cachedLessonDao(): CachedLessonDao
+    abstract fun cachedQueryDao(): CachedQueryDao
 
     companion object {
         @Volatile

@@ -155,59 +155,31 @@ object JarvisDialogueEngine {
         }
 
         // =========================================================================
-        // 3. SALUTATIONS, NOUVELLES ET FAMILLE (DIRECTEMENT COMME UN VRAI AMI)
+        // 3. SALUTATIONS, NOUVELLES ET DISCUSSIONS J.A.R.V.I.S.
         // =========================================================================
         if (lower.startsWith("salut") || lower.startsWith("bonjour") || lower.startsWith("coucou") ||
             lower.startsWith("hello") || lower.startsWith("yo") || lower == "hey" || lower == "slt"
         ) {
             val greetings = listOf(
-                "Salut mon ami ! Quel bonheur d'échanger avec toi ! Dis-moi un peu, comment tu vas aujourd'hui ? Et la famille, tout le monde se porte à merveille ?",
-                "Coucou ! Ça me fait tellement plaisir de t'entendre ! Alors raconte-moi : comment s'est passée ta journée ? Tout va bien chez toi et pour les proches ?",
-                "Salut $userName ! Je suis en pleine forme et ravi de te retrouver. Comment tu te sens aujourd'hui ? Raconte-moi un peu tes nouvelles !"
+                "Bonjour monsieur. Tous les systèmes sont opérationnels sur votre appareil. Comment puis-je vous assister aujourd'hui ?",
+                "À votre service, monsieur. J.A.R.V.I.S. est prêt, en ligne comme hors ligne. Quelles sont vos instructions ?",
+                "Ravi de vous retrouver, monsieur. Je suis à votre entière disposition sur votre téléphone."
             )
             return greetings[abs(lower.hashCode()) % greetings.size]
-        }
-
-        // Question sur la famille
-        if (lower.contains("famille") || lower.contains("les proches") || lower.contains("parents") || lower.contains("enfants") || lower.contains("frère") || lower.contains("soeur")) {
-            return "Pour moi, la famille c'est ce qu'il y a de plus précieux. J'espère sincèrement que tout le monde est en bonne santé et que l'ambiance est au top chez toi ! Ils vont tous bien en ce moment ?"
         }
 
         // Question sur la forme / "Comment tu vas"
         if (lower.contains("comment vas-tu") || lower.contains("comment tu vas") || lower.contains("ça va") ||
             lower.contains("tu vas bien") || lower.contains("la forme") || lower.contains("comment va")
         ) {
-            val formReplies = listOf(
-                "Je pète la forme, surtout maintenant qu'on papote ensemble ! Mais le plus important c'est toi, $userName : comment tu te sens aujourd'hui ? Ta journée se déroule comme tu veux ?",
-                "Au top du top, avec toute l'énergie d'un Jarvis fidèle ! Et toi alors, pas trop fatigué ? Raconte-moi comment tu vas et comment vont tes proches !"
-            )
-            return formReplies[abs(lower.hashCode()) % formReplies.size]
-        }
-
-        // =========================================================================
-        // 4. TAQUINERIE, CHAMBRAGE ET HUMOUR (JARVIS & COMPLICE)
-        // =========================================================================
-        if (lower.contains("taquine") || lower.contains("chamailler") || lower.contains("chambrer") ||
-            lower.contains("blague") || lower.contains("vanne") || lower.contains("drôle") || lower.contains("rigoler")
-        ) {
-            val teaseReplies = listOf(
-                "Haha tu me cherches là ? Attention, $userName, j'ai une répartie niveau ceinture noire ! Dis-moi un truc, et on va voir qui vanne le mieux. Prêt ?",
-                "Tu veux qu'on se taquine ? Attends deux secondes... tu portes encore ce pull que tu mettais l'autre jour ? Haha je rigole ! Allez, balance ta meilleure vanne que je juge !",
-                "Écoute cette petite blague : Que dit un informaticien quand il a froid ? ... Il ferme les fenêtres ! Bon d'accord, elle est un peu geek, mais ça vaut au moins un petit sourire, non ?"
-            )
-            return teaseReplies[abs(lower.hashCode()) % teaseReplies.size]
-        }
-
-        // Si l'utilisateur taquine l'IA ou rigole
-        if (lower.contains("t'es bête") || lower.contains("t'es nul") || lower.contains("haha") || lower.contains("mdr") || lower.contains("t'es marrant") || lower.contains("t'abuses")) {
-            return "Haha mais t'abuses ! C'est l'hôpital qui se moque de la charité là ! Au moins avec moi tu ne t'ennuies jamais. Raconte, qu'est-ce qui te fait autant rire aujourd'hui ?"
+            return "Tous mes modules fonctionnent à plein rendement, monsieur. Je suis prêt pour vos questions ou vos téléchargements de sources."
         }
 
         // Identité & rôle de Jarvis
         if (lower.contains("qui es-tu") || lower.contains("tu es qui") || lower.contains("t'es qui") ||
             lower.contains("jarvis") || lower.contains("ton nom") || lower.contains("présente-toi")
         ) {
-            return "Je m'appelle $compName ! Vois-moi exactement comme ton Jarvis personnel et surtout $friendPote sur ton portable. Mon but, c'est qu'on puisse discuter de tout, se marrer, refaire le monde et parler de tes sujets préférés sans jamais te réciter de cours ennuyeux. De quoi aimerais-tu qu'on parle aujourd'hui ?"
+            return "Je suis J.A.R.V.I.S., votre système d'intelligence artificielle hébergé directement sur votre téléphone. Je suis conçu pour converser en ligne comme hors ligne, et télécharger toutes les sources documentaires dont vous avez besoin."
         }
 
         // Demande explicite de discussion

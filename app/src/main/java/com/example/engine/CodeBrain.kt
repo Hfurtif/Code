@@ -43,13 +43,20 @@ data class BrainResponse(
     val pronunciationTargetWord: String? = null,
     val displayCard: com.example.data.model.HudDisplayCard? = null,
     val displayReport: com.example.data.model.HudReport? = null,
-    val launchTarget: com.example.data.model.LaunchTarget? = null
+    val launchTarget: com.example.data.model.LaunchTarget? = null,
+    val strategyUsed: com.example.service.IntelligenceStrategy? = null,
+    val isFromCache: Boolean = false
 )
 
 class CodeBrain(
     private val context: Context,
     private val database: AppDatabase,
-    val repository: OfflineKnowledgeRepository = OfflineKnowledgeRepository(database)
+    val repository: OfflineKnowledgeRepository = OfflineKnowledgeRepository(database),
+    val adaptiveIntelligenceService: com.example.service.AdaptiveIntelligenceService = com.example.service.AdaptiveIntelligenceService(
+        context = context,
+        database = database,
+        repository = repository
+    )
 ) {
     companion object {
         private const val TAG = "CodeBrain"
@@ -75,10 +82,7 @@ class CodeBrain(
     }
 
     fun isOnline(): Boolean {
-        val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return false
-        val network = cm.activeNetwork ?: return false
-        val capabilities = cm.getNetworkCapabilities(network) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        return adaptiveIntelligenceService.connectivityService.isNetworkAvailable()
     }
 
     suspend fun processUserSpeech(
@@ -95,36 +99,88 @@ class CodeBrain(
         // 1. Direct Voice Commands
         if (lower == "stop" || lower == "arrête" || lower == "silence" || lower == "pause") {
             return@withContext BrainResponse(
-                replyText = if (lang.code.startsWith("en")) "Alright, I'll stop here." else "D'accord, je m'arrête là mon ami.",
+                replyText = if (lang.code.startsWith("en")) "At once, sir. Standing by." else "À vos ordres, monsieur. Je reste en attente.",
                 triggeredCommand = "stop"
             )
         }
         if (lower.contains("plus lentement") || lower.contains("parle plus lentement") || lower.contains("slower")) {
             return@withContext BrainResponse(
-                replyText = if (lang.code.startsWith("en")) "Got it. I will speak more slowly." else "Bien compris mon ami. Je vais parler plus posément.",
+                replyText = if (lang.code.startsWith("en")) "Adjusting vocal pace down, sir." else "Bien compris, monsieur. J'adopte une cadence plus posée.",
                 triggeredCommand = "slower"
             )
         }
         if (lower.contains("plus vite") || lower.contains("faster")) {
             return@withContext BrainResponse(
-                replyText = if (lang.code.startsWith("en")) "Understood! I'll pick up the pace." else "C'est noté, j'accélère un peu le rythme !",
+                replyText = if (lang.code.startsWith("en")) "Accelerating delivery, sir." else "À vos ordres, j'accélère le débit vocal.",
                 triggeredCommand = "faster"
             )
         }
         if (lower.contains("voix féminine") || lower.contains("female voice")) {
             return@withContext BrainResponse(
-                replyText = if (lang.code.startsWith("en")) "Here you go, switching to female voice." else "Et voilà, je passe en voix féminine pour nos échanges.",
+                replyText = if (lang.code.startsWith("en")) "Switching to female vocal synthesizer, sir." else "Synthèse vocale féminine activée, monsieur.",
                 triggeredCommand = "voice_female"
             )
         }
         if (lower.contains("voix masculine") || lower.contains("male voice")) {
             return@withContext BrainResponse(
-                replyText = if (lang.code.startsWith("en")) "Sure thing, switching to male voice." else "Très bien, j'adopte une voix masculine dès maintenant.",
+                replyText = if (lang.code.startsWith("en")) "Switching to male vocal synthesizer, sir." else "Synthèse vocale masculine activée, monsieur.",
                 triggeredCommand = "voice_male"
             )
         }
 
-        // 2b. JARVIS Application & URL Opening (open_app & open_url)
+        // 2. Download knowledge / sources intent directly from speech or chat
+        val downloadTopic = extractDownloadKnowledgeIntent(trimmed)
+        if (downloadTopic != null) {
+            val cleanTopic = cleanTopicName(downloadTopic)
+            val downloaded = downloadAndSaveKnowledge(cleanTopic, lang)
+            val card = com.example.data.model.HudDisplayCard(
+                title = "Mémoire Téléphone • $cleanTopic",
+                content = "Dossier enregistré dans votre téléphone (${downloaded.sizeMb} Mo).\n**Résumé :** ${downloaded.summary.take(130)}...\nDisponible hors ligne et en ligne.",
+                kind = "result"
+            )
+            val reply = if (lang.code.startsWith("en")) {
+                "Downloaded and saved to your phone memory, sir. You can ask me anything about \"$cleanTopic\" anytime, online or offline."
+            } else {
+                "Téléchargement effectué avec succès, monsieur. Le dossier « $cleanTopic » est désormais stocké dans la mémoire locale de votre téléphone. Vous pouvez m'interroger dessus à tout moment, en ligne comme hors ligne."
+            }
+            return@withContext BrainResponse(
+                replyText = reply,
+                webSearchTopic = cleanTopic,
+                downloadedKnowledge = downloaded,
+                displayCard = card
+            )
+        }
+
+        // 3. Memory, Phone Storage and Sources status
+        if (lower.contains("mémoire") || lower.contains("sources") || lower.contains("stockage") ||
+            lower.contains("capacité") || lower.contains("qu'as-tu téléchargé") || lower.contains("qu'as-tu en mémoire") ||
+            lower.contains("que sais-tu") || lower.contains("mes sources") || lower.contains("mes dossiers")
+        ) {
+            val docs = database.documentDao().getAllDocumentsSync()
+            val totalMb = docs.sumOf { it.sizeMb }
+            val storageLimitGb = userProfile.maxStorageLimitGb
+            val card = com.example.data.model.HudDisplayCard(
+                title = "Mémoire Téléphone • J.A.R.V.I.S.",
+                content = "Sources stockées : **${docs.size}**\nEspace occupé : **${String.format(java.util.Locale.US, "%.1f", totalMb)} Mo**\nCapacité autorisée : **${storageLimitGb.toInt()} Go**\nStatut : **${if (isOnline()) "En ligne" else "Hors ligne (Mémoire active)"}**",
+                kind = "info"
+            )
+            val titlesList = if (docs.isNotEmpty()) {
+                docs.take(3).joinToString(", ") { "« ${it.title} »" }
+            } else {
+                "aucun dossier téléchargé pour l'instant"
+            }
+            val reply = if (lang.code.startsWith("en")) {
+                "Sir, I am hosted directly on your phone. Currently, I hold ${docs.size} source(s) in local memory ($titlesList), using ${String.format(java.util.Locale.US, "%.1f", totalMb)} MB out of your ${storageLimitGb.toInt()} GB allocated storage. All sources are fully accessible offline."
+            } else {
+                "Monsieur, je suis logé directement sur votre téléphone. J'ai actuellement ${docs.size} source(s) en mémoire locale ($titlesList), occupant ${String.format(java.util.Locale.US, "%.1f", totalMb)} Mo sur vos ${storageLimitGb.toInt()} Go alloués. Elles sont toutes exploitables hors ligne comme en ligne."
+            }
+            return@withContext BrainResponse(
+                replyText = reply,
+                displayCard = card
+            )
+        }
+
+        // 4. J.A.R.V.I.S. Application & URL Opening (open_app & open_url)
         val appPrefixes = listOf("ouvre ", "lance ", "open ", "démarre ", "demarre ")
         for (prefix in appPrefixes) {
             if (lower.startsWith(prefix) && lower.length > prefix.length + 1) {
@@ -154,23 +210,24 @@ class CodeBrain(
             }
         }
 
-
-        // 2d. JARVIS Mode direct trigger
+        // 5. J.A.R.V.I.S. Mode direct trigger & status
         if (lower.contains("mode jarvis") || lower.contains("majordome") || lower == "jarvis" ||
             lower.contains("active jarvis") || lower.contains("bonjour jarvis")
         ) {
             val card = com.example.data.model.HudDisplayCard(
-                title = "J.A.R.V.I.S. En Ligne",
-                content = "Protocole Mark VII activé. Réponses concises, délégation agentique et affichage holographique prêts.",
+                title = "J.A.R.V.I.S. Opérationnel",
+                content = "Protocole Mark VII activé. Logé sur votre téléphone. Réponses concises, mémoire locale et affichage holographique prêts.",
                 kind = "info"
             )
             return@withContext BrainResponse(
-                replyText = "À votre service, monsieur. J.A.R.V.I.S. est prêt pour vos instructions.",
+                replyText = "À votre service, monsieur. J.A.R.V.I.S. est opérationnel sur votre téléphone, en ligne et hors ligne.",
                 newMode = TutorMode.JARVIS,
                 triggeredCommand = "mode:JARVIS",
                 displayCard = card
             )
         }
+
+        // 6. Phone storage expansion
         if (lower.contains("ajoute 20 go") || lower.contains("augmente le stockage") ||
             lower.contains("plus de stockage") || lower.contains("je t'autorise") ||
             (lower.contains("autorise") && lower.contains("stockage")) ||
@@ -180,76 +237,12 @@ class CodeBrain(
             database.userDao().insertOrUpdate(userProfile.copy(maxStorageLimitGb = newLimit))
             return@withContext BrainResponse(
                 replyText = if (lang.code.startsWith("en")) {
-                    "Thank you for the authorization! I have expanded the storage limit to ${newLimit.toInt()} GB on your phone. We have plenty of space to store everything!"
+                    "Storage capacity expanded to ${newLimit.toInt()} GB on your phone, sir. We have ample room for further downloads."
                 } else {
-                    "Merci pour ton accord ! J'ai étendu la capacité de stockage à ${newLimit.toInt()} Go sur ton portable. Nous avons tout l'espace nécessaire pour continuer d'enregistrer tes connaissances et dossiers !"
+                    "Capacité étendue à ${newLimit.toInt()} Go sur votre téléphone, monsieur. Nous disposons de tout l'espace nécessaire pour vos futurs téléchargements."
                 },
                 triggeredCommand = "expand_storage_20gb"
             )
-        }
-
-        // 2b. Companion rename intent (e.g. "appelle-toi Léo", "change ton nom en Lina", "je veux t'appeler Maya")
-        val renameTarget = extractCompanionRenameIntent(trimmed)
-        if (renameTarget != null) {
-            val genderFeedback = if (userProfile.companionGender.equals("girl", ignoreCase = true) || userProfile.companionGender.equals("female", ignoreCase = true)) "ton amie" else "ton ami"
-            return@withContext BrainResponse(
-                replyText = "C'est noté ! À partir de maintenant, je m'appelle $renameTarget. Je suis ravi d'être $genderFeedback dans l'application Code !",
-                newCompanionName = renameTarget
-            )
-        }
-
-        // 2c. English Pronunciation Guidance Intent ("comment prononcer...", "how to pronounce...", "prononce...")
-        val targetPronunciationWord = extractPronunciationTarget(trimmed)
-        if (targetPronunciationWord != null) {
-            val matchingExercise = CurriculumRepository.pronunciationDrills.firstOrNull {
-                it.word.equals(targetPronunciationWord, ignoreCase = true)
-            }
-            val ipa = matchingExercise?.phonetic ?: "/${targetPronunciationWord.lowercase()}/"
-            val syllables = matchingExercise?.syllables ?: targetPronunciationWord
-            val tip = matchingExercise?.tip ?: "Écoute bien chaque son et articule clairement."
-            val reply = if (lang.code.startsWith("en")) {
-                "Here is the pronunciation for \"$targetPronunciationWord\": $ipa ($syllables). Tip: $tip. Listen to my vocal guidance and repeat after me!"
-            } else {
-                "Voici comment bien prononcer « $targetPronunciationWord » en anglais : $ipa (découpage : $syllables). Astuce : $tip. Écoute bien mon articulation et répète à voix haute !"
-            }
-            return@withContext BrainResponse(
-                replyText = reply,
-                triggeredCommand = "pronunciation_guide:$targetPronunciationWord",
-                pronunciationTargetWord = targetPronunciationWord
-            )
-        }
-
-        // 2d. General Pronunciation Studio intent
-        if (lower.contains("atelier prononciation") || lower.contains("guide prononciation") ||
-            lower.contains("exercices de prononciation") || lower.contains("travailler ma prononciation") ||
-            lower.contains("pronunciation studio") || lower.contains("pronunciation practice")
-        ) {
-            val reply = if (lang.code.startsWith("en")) {
-                "Opening the English Pronunciation Studio! Listen to tricky words at normal and slow speeds, and practice with instant speech evaluation."
-            } else {
-                "J'ouvre l'Atelier de Prononciation ! Tu peux y écouter les mots pièges de l'anglais à vitesse normale ou ralentie (syllabe par syllabe) et t'entraîner au micro avec un retour vocal instantané."
-            }
-            return@withContext BrainResponse(
-                replyText = reply,
-                triggeredCommand = "open_pronunciation_studio"
-            )
-        }
-
-        // 3. Level & Progression check (Directly answered in conversation without needing separate screens)
-        if (lower.contains("mon niveau") || lower.contains("ma progression") ||
-            lower.contains("quel niveau") || lower.contains("où j'en suis") ||
-            lower.contains("mes progrès") || lower.contains("évalue-moi") ||
-            lower.contains("fais le point") || lower.contains("my level") || lower.contains("my progress")
-        ) {
-            val userLevel = userProfile.level.ifBlank { "Intermédiaire B1" }
-            val docsCount = database.documentDao().getDocumentCount()
-            val errorsCount = database.learnedErrorDao().getAllErrorsSync().size
-            val reply = if (lang.code.startsWith("en")) {
-                "Here is your progress update, my friend! Your estimated level is $userLevel. You have $docsCount stored source(s) in your offline memory that we can discuss anytime. You have mastered $errorsCount key language points. Keep going! Would you like to practice or explore one of your sources?"
-            } else {
-                "Voici le point sur ta progression, mon ami ! Ton niveau actuel est estimé à : $userLevel. Tu as déjà $docsCount source(s) mémorisée(s) dans ma mémoire locale pour nos discussions hors ligne. Tu as également assimilé $errorsCount notions clés. Tu progresses très bien ! De quelle source ou sujet souhaites-tu qu'on discute ?"
-            }
-            return@withContext BrainResponse(replyText = reply)
         }
 
         // 4. Direct Link & Source ingestion (YouTube, TikTok, Web links) provided in conversation
@@ -372,48 +365,23 @@ class CodeBrain(
         val matchingDoc = nbSourceContext?.matchingDocuments?.firstOrNull()
         val matchingContent = nbSourceContext?.formattedContext
 
-        // 9. Online Brain with Gemini (Prioritized for real intelligent AI dialogue like Jarvis & NotebookLM)
-        val hasGemini = isOnline() && GeminiClient.hasValidApiKey(userProfile.geminiApiKey)
-        if (hasGemini) {
-            try {
-                val apiResponse = callGemini(trimmed, currentMode, userProfile, recentMessages, detectedMistake, matchingContent)
-                if (apiResponse.isNotBlank()) {
-                    return@withContext BrainResponse(
-                        replyText = apiResponse,
-                        correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
-                        identifiedError = detectedMistake,
-                        isOfflineMode = false,
-                        citationChunks = nbSourceContext?.retrievedChunks ?: emptyList()
-                    )
-                }
-            } catch (e: Exception) {
-                Log.w(TAG, "Gemini API call failed, falling back to Jarvis dialogue engine: ${e.message}")
-            }
-        }
-
-        // 10. General Conversational / Extractive Response (Calame extractive citations or Jarvis dialogue)
-        val isExplicitSourceSearch = preferredDocId != null ||
-                lower.contains("source") || lower.contains("résum") || lower.contains("document") ||
-                lower.contains("qu'est-ce") || lower.contains("que dit") || lower.contains("selon") ||
-                lower.contains("explique") || lower.contains("d'après")
-
-        val offlineReply = if (isExplicitSourceSearch && nbSourceContext != null && nbSourceContext.extractiveSummary.isNotBlank()) {
-            "D'après tes sources mémorisées :\n\n${nbSourceContext.extractiveSummary}"
-        } else {
-            JarvisDialogueEngine.generateFriendlyReply(
-                userText = trimmed,
-                profile = userProfile,
-                recentMessages = recentMessages,
-                sourceMatch = matchingDoc
-            )
-        }
+        // 9. Adaptive Intelligence Service Layer (Network check -> Online Cloud LLM -> Offline Cached Strategy -> Offline Local LLM)
+        val intelResult = adaptiveIntelligenceService.processQuery(
+            userPrompt = trimmed,
+            userProfile = userProfile,
+            recentMessages = recentMessages,
+            preferredDocId = preferredDocId,
+            groundingContext = matchingContent
+        )
 
         BrainResponse(
-            replyText = offlineReply,
-            correctionNote = detectedMistake?.let { "Petite correction d'ami : tu as dit \"${it.badPhrase}\", on dit plutôt \"${it.correction}\"." },
+            replyText = intelResult.replyText,
+            correctionNote = detectedMistake?.let { "Correction linguistique : vous avez dit \"${it.badPhrase}\", la formulation correcte est \"${it.correction}\"." },
             identifiedError = detectedMistake,
-            isOfflineMode = !isOnline(),
-            citationChunks = nbSourceContext?.retrievedChunks ?: emptyList()
+            isOfflineMode = intelResult.isOffline,
+            citationChunks = nbSourceContext?.retrievedChunks ?: emptyList(),
+            strategyUsed = intelResult.strategyUsed,
+            isFromCache = intelResult.isFromCache
         )
     }
 

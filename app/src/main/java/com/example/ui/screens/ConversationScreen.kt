@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -10,6 +13,8 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,46 +32,35 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AttachFile
-import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudDownload
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Hearing
-import androidx.compose.material.icons.filled.LocalFireDepartment
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.wrapContentWidth
-import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Language
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.MicOff
 import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Stop
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -91,18 +85,24 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.data.model.TutorMode
+import com.example.R
+import com.example.data.model.DownloadedDocument
+import com.example.service.CacheStats
 import com.example.ui.CodeViewModel
 import com.example.ui.components.AnimatedOrb
 import com.example.ui.components.GlassCard
+import com.example.ui.components.HudDisplayCardView
 import com.example.ui.components.OrbState
 import com.example.ui.theme.AlertPink
 import com.example.ui.theme.DarkBackground
@@ -112,10 +112,6 @@ import com.example.ui.theme.DarkSurface
 import com.example.ui.theme.DarkSurfaceVariant
 import com.example.ui.theme.ElectricBlue
 import com.example.ui.theme.NeonCyan
-import androidx.compose.foundation.Image
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import com.example.R
 import com.example.ui.theme.NeonMagenta
 import com.example.ui.theme.NeonViolet
 import com.example.ui.theme.OfflineAmber
@@ -123,6 +119,7 @@ import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.TextMuted
 import com.example.ui.theme.TextPrimary
 import com.example.ui.theme.TextSecondary
+import java.util.Locale
 
 @Composable
 fun ConversationScreen(
@@ -146,32 +143,30 @@ fun ConversationScreen(
     val liveTranscript by viewModel.liveUserTranscript.collectAsState()
     val liveReply by viewModel.liveCodeReply.collectAsState()
     val correctionNote by viewModel.currentCorrectionNote.collectAsState()
-    val currentMode by viewModel.selectedMode.collectAsState()
     val isOnline by viewModel.isOnline.collectAsState()
     val isListening by viewModel.isListening.collectAsState()
     val recordingDuration by viewModel.recordingDurationSeconds.collectAsState()
     val isSpeaking by viewModel.isSpeaking.collectAsState()
-    val isAutoSpeakEnabled by viewModel.isAutoSpeakEnabled.collectAsState()
     val currentlySpokenText by viewModel.currentlySpokenText.collectAsState()
-    val currentSpokenWord by viewModel.currentSpokenWord.collectAsState()
     val isHistoryVisible by viewModel.isHistoryVisible.collectAsState()
     val isIngestingSource by viewModel.isIngestingSource.collectAsState()
-    val storagePromptResource by viewModel.storagePromptResource.collectAsState()
     val allMessages by viewModel.allMessages.collectAsState()
-    val pendingTasks by viewModel.pendingTasks.collectAsState()
+    val allDocuments by viewModel.allDocuments.collectAsState()
     val userProfile by viewModel.userProfile.collectAsState()
-    val activeSource by viewModel.activeSourceForDiscussion.collectAsState()
-    val companionDisplayName = userProfile.companionName.ifBlank { "Code" }
-    val vocabList by viewModel.allVocabulary.collectAsState()
-    val agenticState by viewModel.agenticExecutionState.collectAsState()
-    val lastVoiceCommandBanner by viewModel.lastVoiceCommandBanner.collectAsState()
-    val isHandsFreeMode by viewModel.isHandsFreeMode.collectAsState()
-    val isHandsFreeSheetVisible by viewModel.isHandsFreeSheetVisible.collectAsState()
     val hudDisplayCards by viewModel.hudDisplayCards.collectAsState()
+    val intelligenceStrategy by viewModel.intelligenceStrategy.collectAsState()
+    val cacheStats by viewModel.cacheStats.collectAsState()
 
     var textInput by remember { mutableStateOf("") }
-    var showAddSourceDialog by remember { mutableStateOf(false) }
+    var showDownloadDialog by remember { mutableStateOf(false) }
+    var showMemoryManagerDialog by remember { mutableStateOf(false) }
+    var showAddSourceFileDialog by remember { mutableStateOf(false) }
+
     val historyListState = rememberLazyListState()
+
+    val totalMb = allDocuments.sumOf { it.sizeMb }
+    val maxLimitGb = userProfile.maxStorageLimitGb
+    val usedFraction = ((totalMb / (maxLimitGb * 1024.0))).coerceIn(0.0, 1.0).toFloat()
 
     val documentPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenMultipleDocuments()
@@ -208,15 +203,15 @@ fun ConversationScreen(
             .fillMaxSize()
             .background(DarkBackground)
     ) {
-        // --- JARVIS Mark VII HUD Corner Brackets ---
+        // --- J.A.R.V.I.S. Mark VII Holographic Corner Brackets ---
         androidx.compose.foundation.Canvas(
             modifier = Modifier
                 .align(Alignment.TopStart)
                 .padding(6.dp)
                 .size(20.dp)
         ) {
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(0f, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, 0f), end = Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, 0f), end = Offset(0f, size.height), strokeWidth = 2.dp.toPx())
         }
         androidx.compose.foundation.Canvas(
             modifier = Modifier
@@ -224,8 +219,8 @@ fun ConversationScreen(
                 .padding(6.dp)
                 .size(20.dp)
         ) {
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(size.width, 0f), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, 0f), end = Offset(size.width, 0f), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(size.width, 0f), end = Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
         }
         androidx.compose.foundation.Canvas(
             modifier = Modifier
@@ -233,8 +228,8 @@ fun ConversationScreen(
                 .padding(6.dp)
                 .size(20.dp)
         ) {
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, size.height), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, 0f), end = androidx.compose.ui.geometry.Offset(0f, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, size.height), end = Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, 0f), end = Offset(0f, size.height), strokeWidth = 2.dp.toPx())
         }
         androidx.compose.foundation.Canvas(
             modifier = Modifier
@@ -242,25 +237,25 @@ fun ConversationScreen(
                 .padding(6.dp)
                 .size(20.dp)
         ) {
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(0f, size.height), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
-            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = androidx.compose.ui.geometry.Offset(size.width, 0f), end = androidx.compose.ui.geometry.Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(0f, size.height), end = Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
+            drawLine(color = NeonCyan.copy(alpha = 0.5f), start = Offset(size.width, 0f), end = Offset(size.width, size.height), strokeWidth = 2.dp.toPx())
         }
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 8.dp),
+                .padding(horizontal = 16.dp, vertical = 6.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // --- TOP BAR: App branding & Top-Right Badges (Streak Flame & Online Status) ---
+            // --- TOP BAR: J.A.R.V.I.S. MARK VII & Status ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 6.dp),
+                    .padding(top = 2.dp, bottom = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Companion Avatar & Branding
+                // J.A.R.V.I.S. Identity
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -268,10 +263,10 @@ fun ConversationScreen(
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(36.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .border(
-                                androidx.compose.foundation.BorderStroke(
+                                BorderStroke(
                                     2.dp,
                                     Brush.linearGradient(listOf(NeonCyan, NeonMagenta, NeonViolet))
                                 ),
@@ -280,7 +275,7 @@ fun ConversationScreen(
                     ) {
                         Image(
                             painter = painterResource(id = R.drawable.ic_app_icon),
-                            contentDescription = "Icône $companionDisplayName",
+                            contentDescription = "J.A.R.V.I.S.",
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
@@ -288,16 +283,16 @@ fun ConversationScreen(
 
                     Column {
                         Text(
-                            text = companionDisplayName.uppercase(),
+                            text = "J.A.R.V.I.S. MARK VII",
                             color = NeonCyan,
-                            fontSize = 17.sp,
+                            fontSize = 16.sp,
                             fontWeight = FontWeight.Black,
                             letterSpacing = 1.2.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            text = "COMPAGNON VOCAL IA",
+                            text = "LOGÉ SUR LE TÉLÉPHONE • EN LIGNE & HORS LIGNE",
                             color = NeonViolet,
                             fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
@@ -307,496 +302,256 @@ fun ConversationScreen(
                     }
                 }
 
-                // Badges en haut à droite: Indicateur de série (Flamme) & Indicateur En ligne
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.wrapContentWidth()
+                // Online / Offline & Intelligence Strategy Badge
+                Surface(
+                    color = when {
+                        !isOnline && intelligenceStrategy == com.example.service.IntelligenceStrategy.OFFLINE_CACHED_STRATEGY -> ElectricBlue.copy(alpha = 0.2f)
+                        !isOnline -> OfflineAmber.copy(alpha = 0.2f)
+                        else -> DarkSurfaceVariant
+                    },
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        when {
+                            !isOnline && intelligenceStrategy == com.example.service.IntelligenceStrategy.OFFLINE_CACHED_STRATEGY -> ElectricBlue
+                            !isOnline -> OfflineAmber
+                            else -> SuccessGreen.copy(alpha = 0.6f)
+                        }
+                    )
                 ) {
-                    // Badge Série / Streak avec Flamme
-                    Surface(
-                        color = OfflineAmber.copy(alpha = 0.16f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, OfflineAmber.copy(alpha = 0.5f))
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.LocalFireDepartment,
-                                contentDescription = "Série de jours",
-                                tint = OfflineAmber,
-                                modifier = Modifier.size(13.dp)
-                            )
-                            Spacer(modifier = Modifier.width(3.dp))
-                            Text(
-                                text = "${userProfile.streakDays} j",
-                                color = OfflineAmber,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
-                    }
-
-                    // Badge Statut de Connexion (En ligne / Hors ligne)
-                    Surface(
-                        color = if (isOnline) DarkSurfaceVariant else OfflineAmber.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(12.dp),
-                        border = androidx.compose.foundation.BorderStroke(
-                            1.dp,
-                            if (isOnline) SuccessGreen.copy(alpha = 0.6f) else OfflineAmber
+                        Icon(
+                            imageVector = Icons.Default.FiberManualRecord,
+                            contentDescription = null,
+                            tint = when {
+                                !isOnline && intelligenceStrategy == com.example.service.IntelligenceStrategy.OFFLINE_CACHED_STRATEGY -> ElectricBlue
+                                !isOnline -> OfflineAmber
+                                else -> SuccessGreen
+                            },
+                            modifier = Modifier.size(8.dp)
                         )
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.FiberManualRecord,
-                                contentDescription = null,
-                                tint = if (isOnline) SuccessGreen else OfflineAmber,
-                                modifier = Modifier.size(8.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = if (isOnline) "En ligne" else "Hors ligne",
-                                color = if (isOnline) TextPrimary else OfflineAmber,
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Medium,
-                                maxLines = 1,
-                                softWrap = false
-                            )
-                        }
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (isOnline) "En ligne (Gemini)" else intelligenceStrategy.badge,
+                            color = when {
+                                !isOnline && intelligenceStrategy == com.example.service.IntelligenceStrategy.OFFLINE_CACHED_STRATEGY -> ElectricBlue
+                                !isOnline -> OfflineAmber
+                                else -> TextPrimary
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
                     }
                 }
             }
 
-            // --- LIGNE DE BOUTONS D'ACTIONS (Horizontal Scrollable pour empêcher tout écrasement) ---
+            // --- PHONE MEMORY & STORAGE PILL (Clickable to manage sources & capacity) ---
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .clickable { showMemoryManagerDialog = true }
+                    .testTag("phone_memory_status_bar"),
+                color = DarkSurface,
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.45f))
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.Smartphone,
+                                contentDescription = null,
+                                tint = NeonCyan,
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Mémoire Téléphone : ",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                            Text(
+                                text = "${allDocuments.size} source(s) (${String.format(Locale.US, "%.1f", totalMb)} Mo)",
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "Capacité : ${maxLimitGb.toInt()} Go >",
+                            color = NeonViolet,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(5.dp))
+
+                    LinearProgressIndicator(
+                        progress = { usedFraction },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .clip(RoundedCornerShape(2.dp)),
+                        color = NeonCyan,
+                        trackColor = DarkSurfaceVariant
+                    )
+                }
+            }
+
+            // --- QUICK ACTION CHIPS ---
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .horizontalScroll(rememberScrollState())
-                    .padding(bottom = 6.dp),
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Hands-Free English Practice Button
+                // Download a new source
                 Surface(
                     modifier = Modifier
                         .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.startHandsFreeConversation() }
-                        .testTag("top_hands_free_button"),
-                    color = if (isHandsFreeMode) SuccessGreen.copy(alpha = 0.25f) else ElectricBlue.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isHandsFreeMode) SuccessGreen else ElectricBlue.copy(alpha = 0.7f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = "🇬🇧",
-                            fontSize = 12.sp
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isHandsFreeMode) "Mains Libres Actif" else "Mains Libres",
-                            color = if (isHandsFreeMode) SuccessGreen else TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // J.A.R.V.I.S. Mode Button (Iron Man Mark VII Butler)
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.setMode(com.example.data.model.TutorMode.JARVIS) }
-                        .testTag("top_jarvis_mode_button"),
-                    color = if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan.copy(alpha = 0.3f) else DarkSurfaceVariant,
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan else DarkCardBorder
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Hub,
-                            contentDescription = "Mode J.A.R.V.I.S.",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (currentMode == com.example.data.model.TutorMode.JARVIS) "J.A.R.V.I.S. Actif" else "J.A.R.V.I.S.",
-                            color = if (currentMode == com.example.data.model.TutorMode.JARVIS) NeonCyan else TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-
-                // Flashcards Review Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showFlashcardReview() }
-                        .testTag("top_flashcards_button"),
-                    color = NeonViolet.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.BookmarkAdd,
-                            contentDescription = "Flashcards",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Flashcards (${vocabList.size})",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // URL Lesson (YouTube, TikTok, Web) Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showUrlLessonDialog() }
-                        .testTag("top_url_lesson_button"),
-                    color = ElectricBlue.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Link,
-                            contentDescription = "Leçon URL",
-                            tint = ElectricBlue,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Lien URL",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // Harnais Agentique Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showAgenticHarnessDialog() }
-                        .testTag("top_agentic_harness_button"),
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showDownloadDialog = true }
+                        .testTag("action_download_source"),
                     color = NeonCyan.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, NeonCyan)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Hub,
-                            contentDescription = "Harnais Agentique",
+                            imageVector = Icons.Default.CloudDownload,
+                            contentDescription = null,
                             tint = NeonCyan,
                             modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Harnais IA",
-                            color = TextPrimary,
+                            text = "📥 Télécharger une source",
+                            color = NeonCyan,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
+                            fontWeight = FontWeight.Bold
                         )
                     }
                 }
 
-                // Voix Studio Button (Google HD & ElevenLabs)
+                // Phone Memory & Sources list
                 Surface(
                     modifier = Modifier
                         .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showVoiceStudio() }
-                        .testTag("top_voice_studio_button"),
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { showMemoryManagerDialog = true }
+                        .testTag("action_view_memory"),
                     color = NeonViolet.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            imageVector = Icons.Default.RecordVoiceOver,
-                            contentDescription = "Studio Voix",
+                            imageVector = Icons.Default.Folder,
+                            contentDescription = null,
                             tint = NeonViolet,
                             modifier = Modifier.size(13.dp)
                         )
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "Voix",
+                            text = "🧠 Sources en mémoire (${allDocuments.size})",
                             color = TextPrimary,
                             fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
 
-
-                // Auto-Speech / TTS Toggle
+                // Storage Capacity Check
                 Surface(
                     modifier = Modifier
                         .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.toggleAutoSpeak() }
-                        .testTag("top_auto_speech_toggle_button"),
-                    color = if (isAutoSpeakEnabled) NeonCyan.copy(alpha = 0.2f) else AlertPink.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isAutoSpeakEnabled) NeonCyan.copy(alpha = 0.6f) else AlertPink.copy(alpha = 0.6f)
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = if (isAutoSpeakEnabled) Icons.AutoMirrored.Filled.VolumeUp else Icons.AutoMirrored.Filled.VolumeOff,
-                            contentDescription = if (isAutoSpeakEnabled) "Synthèse vocale activée" else "Synthèse vocale en sourdine",
-                            tint = if (isAutoSpeakEnabled) NeonCyan else AlertPink,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = if (isAutoSpeakEnabled) "TTS Actif" else "TTS Muet",
-                            color = if (isAutoSpeakEnabled) NeonCyan else AlertPink,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // Commandes Vocales Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showVoiceCommandHelp() }
-                        .testTag("top_voice_commands_button"),
-                    color = NeonCyan.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.6f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Hearing,
-                            contentDescription = "Commandes Vocales",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Commandes",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-
-                // Language Switcher Button
-                Surface(
-                    modifier = Modifier
-                        .wrapContentWidth()
-                        .defaultMinSize(minWidth = 56.dp)
-                        .clip(RoundedCornerShape(14.dp))
-                        .clickable { viewModel.showLanguageDialog() }
-                        .testTag("top_language_switcher_button"),
-                    color = DarkSurfaceVariant,
-                    shape = RoundedCornerShape(14.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Language,
-                            contentDescription = "Changer la langue",
-                            tint = NeonCyan,
-                            modifier = Modifier.size(13.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = "Langue",
-                            color = TextPrimary,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            softWrap = false
-                        )
-                    }
-                }
-            }
-
-            // Voice Command Acknowledgment Banner
-            lastVoiceCommandBanner?.let { banner ->
-                Surface(
-                    color = NeonCyan.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.7f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                        .testTag("voice_command_feedback_banner")
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = NeonCyan,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text(
-                                text = banner,
-                                color = TextPrimary,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        IconButton(
-                            onClick = { viewModel.clearVoiceCommandBanner() },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Fermer",
-                                tint = TextSecondary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                        }
-                    }
-                }
-            }
-
-            // Live Agentic Harness Active Banner
-            if (agenticState.isActive) {
-                Surface(
-                    color = NeonCyan.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.7f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .clickable { viewModel.showAgenticHarnessDialog() }
-                        .testTag("active_agentic_harness_banner")
+                        .clickable { viewModel.processInput("Donne-moi le statut de ta mémoire et du stockage") }
+                        .testTag("action_storage_status"),
+                    color = DarkSurfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, DarkCardBorder)
                 ) {
                     Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = NeonCyan,
-                                strokeWidth = 2.dp
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Column {
-                                Text(
-                                    text = "🧠 Harnais Agentique (${agenticState.currentStepIndex}/${agenticState.totalSteps}) : ${agenticState.currentActivity}",
-                                    color = NeonCyan,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "Objectif : « ${agenticState.goal.take(45)} »",
-                                    color = TextSecondary,
-                                    fontSize = 10.sp
-                                )
-                            }
-                        }
-                        Text("Détails >", color = NeonCyan, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Icon(
+                            imageVector = Icons.Default.Hub,
+                            contentDescription = null,
+                            tint = ElectricBlue,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = "⚡ Statut & Capacité",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+
+                // Silence TTS
+                Surface(
+                    modifier = Modifier
+                        .wrapContentWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .clickable { viewModel.stopSpeaking() }
+                        .testTag("action_stop_tts"),
+                    color = if (isSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, if (isSpeaking) AlertPink else DarkCardBorder)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Stop,
+                            contentDescription = null,
+                            tint = if (isSpeaking) AlertPink else TextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Silence",
+                            color = if (isSpeaking) AlertPink else TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
 
-            // JARVIS Holographic HUD Cards Stream (display_card)
+            // --- HOLOGRAPHIC HUD CARDS (Downloads, Results, Storage info) ---
             if (hudDisplayCards.isNotEmpty()) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(bottom = 8.dp),
+                        .padding(vertical = 4.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Row(
@@ -805,14 +560,14 @@ fun ConversationScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "CARTES HUD (${hudDisplayCards.size})",
+                            text = "AFFICHAGE HOLOGRAPHIQUE (${hudDisplayCards.size})",
                             color = NeonCyan,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.sp
                         )
                         Text(
-                            text = "Effacer tout",
+                            text = "Effacer",
                             color = TextMuted,
                             fontSize = 10.sp,
                             modifier = Modifier
@@ -821,7 +576,7 @@ fun ConversationScreen(
                         )
                     }
                     for (card in hudDisplayCards.take(2)) {
-                        com.example.ui.components.HudDisplayCardView(
+                        HudDisplayCardView(
                             card = card,
                             onDismiss = { viewModel.dismissHudCard(card.id) }
                         )
@@ -829,120 +584,7 @@ fun ConversationScreen(
                 }
             }
 
-            // Active Source Grounding Card (NotebookLM Mode)
-            activeSource?.let { src ->
-                Surface(
-                    color = NeonCyan.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(bottom = 8.dp)
-                ) {
-                    Column(modifier = Modifier.padding(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text(
-                                    text = "Source active : « ${src.title} »",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                            IconButton(
-                                onClick = { viewModel.clearActiveSource() },
-                                modifier = Modifier.size(24.dp)
-                            ) {
-                                Icon(Icons.Default.Close, contentDescription = "Détacher", tint = TextMuted, modifier = Modifier.size(14.dp))
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            listOf(
-                                "💡 Résumer" to "summary",
-                                "🎯 Quiz" to "quiz",
-                                "🔍 Points clés" to "key_points",
-                                "❓ Expliquer" to "explain"
-                            ).forEach { (label, qType) ->
-                                Surface(
-                                    color = DarkSurface,
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f)),
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(8.dp))
-                                        .clickable { viewModel.startDiscussionOnSource(src, qType) }
-                                ) {
-                                    Text(
-                                        text = label,
-                                        color = NeonCyan,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Quick Knowledge & Progression conversation prompt chips
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
-                    .padding(bottom = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val quickIdeas = listOf(
-                    "🤖 Statut système Mark VII",
-                    "🚀 Ouvre YouTube",
-                    "🎵 Lance Spotify",
-                    "🌐 Ouvre mes e-mails",
-                    "🔍 Recherche les actus IA",
-                    "📚 Interroger mes sources (NotebookLM)",
-                    "⚡ Analyse et calculs",
-                    "❌ Annule la tâche"
-                )
-                quickIdeas.forEach { idea ->
-                    Surface(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(8.dp))
-                            .clickable {
-                                if (idea.startsWith("📚 Interroger")) {
-                                    viewModel.queryAllSources()
-                                } else {
-                                    viewModel.processInput(idea)
-                                }
-                            },
-                        color = DarkSurfaceVariant.copy(alpha = 0.8f),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, DarkCardBorder),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = idea,
-                            color = TextSecondary,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                        )
-                    }
-                }
-            }
-
-            // --- MAIN CONTENT: ORBE OR HISTORY ---
+            // --- MAIN BODY: ORB OR CONVERSATION HISTORY ---
             if (isHistoryVisible) {
                 // Scrollable History Drawer
                 GlassCard(
@@ -962,7 +604,7 @@ fun ConversationScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Historique de conversation",
+                                text = "Historique J.A.R.V.I.S.",
                                 color = TextPrimary,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 14.sp
@@ -988,11 +630,11 @@ fun ConversationScreen(
                                     Surface(
                                         color = if (isUser) NeonCyan.copy(alpha = 0.18f) else DarkSurfaceVariant,
                                         shape = RoundedCornerShape(14.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
+                                        border = BorderStroke(
                                             1.dp,
                                             if (isUser) NeonCyan.copy(alpha = 0.4f) else DarkCardBorderViolet
                                         ),
-                                        modifier = Modifier.fillMaxWidth(0.85f)
+                                        modifier = Modifier.fillMaxWidth(0.88f)
                                     ) {
                                         Column(modifier = Modifier.padding(10.dp)) {
                                             Row(
@@ -1001,16 +643,16 @@ fun ConversationScreen(
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
                                                 Text(
-                                                    text = if (isUser) "Toi" else companionDisplayName,
+                                                    text = if (isUser) "Vous" else "J.A.R.V.I.S.",
                                                     color = if (isUser) NeonCyan else NeonViolet,
-                                                    fontSize = 10.sp,
+                                                    fontSize = 11.sp,
                                                     fontWeight = FontWeight.Bold
                                                 )
                                                 if (!isUser && msg.isWebSearch) {
                                                     Surface(
                                                         color = ElectricBlue.copy(alpha = 0.25f),
                                                         shape = RoundedCornerShape(6.dp),
-                                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
+                                                        border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f))
                                                     ) {
                                                         Row(
                                                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -1024,7 +666,7 @@ fun ConversationScreen(
                                                             )
                                                             Spacer(modifier = Modifier.width(3.dp))
                                                             Text(
-                                                                text = msg.webSearchTopic ?: "Recherche Web",
+                                                                text = msg.webSearchTopic ?: "Recherche",
                                                                 color = NeonCyan,
                                                                 fontSize = 9.sp,
                                                                 fontWeight = FontWeight.SemiBold
@@ -1033,55 +675,13 @@ fun ConversationScreen(
                                                     }
                                                 }
                                             }
-                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Spacer(modifier = Modifier.height(4.dp))
                                             Text(
                                                 text = msg.text,
                                                 color = TextPrimary,
                                                 fontSize = 13.sp,
                                                 lineHeight = 18.sp
                                             )
-                                            if (!msg.correctionNote.isNullOrBlank()) {
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = msg.correctionNote,
-                                                    color = AlertPink,
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Medium
-                                                )
-                                            }
-
-                                            // Calame Passage Citation Chips
-                                            val citationIndices = remember(msg.text) {
-                                                Regex("\\[(\\d+)\\]").findAll(msg.text).mapNotNull { it.groupValues[1].toIntOrNull() }.distinct().toList()
-                                            }
-                                            if (!isUser && citationIndices.isNotEmpty()) {
-                                                Spacer(modifier = Modifier.height(6.dp))
-                                                Row(
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Text("Citations :", color = TextMuted, fontSize = 10.sp)
-                                                    citationIndices.forEach { citeNum ->
-                                                        Surface(
-                                                            color = NeonCyan.copy(alpha = 0.2f),
-                                                            shape = RoundedCornerShape(6.dp),
-                                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
-                                                            modifier = Modifier
-                                                                .clip(RoundedCornerShape(6.dp))
-                                                                .clickable { viewModel.openCitationByIndex(citeNum - 1) }
-                                                        ) {
-                                                            Text(
-                                                                text = "[$citeNum]",
-                                                                color = NeonCyan,
-                                                                fontSize = 11.sp,
-                                                                fontWeight = FontWeight.Bold,
-                                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                            )
-                                                        }
-                                                    }
-                                                }
-                                            }
-
 
                                             Spacer(modifier = Modifier.height(6.dp))
                                             Row(
@@ -1089,27 +689,25 @@ fun ConversationScreen(
                                                 horizontalArrangement = Arrangement.End,
                                                 verticalAlignment = Alignment.CenterVertically
                                             ) {
-                                                // Audio Play / TTS Listen button for this message
                                                 val isThisMsgSpeaking = isSpeaking && currentlySpokenText == msg.text
                                                 Surface(
                                                     color = if (isThisMsgSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurface,
                                                     shape = RoundedCornerShape(8.dp),
-                                                    border = androidx.compose.foundation.BorderStroke(
+                                                    border = BorderStroke(
                                                         1.dp,
                                                         if (isThisMsgSpeaking) AlertPink else NeonViolet.copy(alpha = 0.4f)
                                                     ),
                                                     modifier = Modifier
                                                         .clip(RoundedCornerShape(8.dp))
                                                         .clickable { viewModel.speakMessage(msg) }
-                                                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                                                        .testTag("tts_message_button_${msg.id}")
+                                                        .padding(horizontal = 8.dp, vertical = 3.dp)
                                                 ) {
                                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                                         Icon(
                                                             imageVector = if (isThisMsgSpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
-                                                            contentDescription = if (isThisMsgSpeaking) "Arrêter" else "Écouter la voix",
+                                                            contentDescription = null,
                                                             tint = if (isThisMsgSpeaking) AlertPink else NeonViolet,
-                                                            modifier = Modifier.size(11.dp)
+                                                            modifier = Modifier.size(12.dp)
                                                         )
                                                         Spacer(modifier = Modifier.width(4.dp))
                                                         Text(
@@ -1118,35 +716,6 @@ fun ConversationScreen(
                                                             fontSize = 10.sp,
                                                             fontWeight = FontWeight.SemiBold
                                                         )
-                                                    }
-                                                }
-
-                                                if (!isUser) {
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Surface(
-                                                        color = DarkSurface,
-                                                        shape = RoundedCornerShape(8.dp),
-                                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.4f)),
-                                                        modifier = Modifier
-                                                            .clip(RoundedCornerShape(8.dp))
-                                                            .clickable { viewModel.showAddFlashcard(prefilledExample = msg.text) }
-                                                            .padding(horizontal = 6.dp, vertical = 3.dp)
-                                                    ) {
-                                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                                            Icon(
-                                                                imageVector = Icons.Default.BookmarkAdd,
-                                                                contentDescription = "Sauvegarder un mot",
-                                                                tint = NeonCyan,
-                                                                modifier = Modifier.size(11.dp)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(4.dp))
-                                                            Text(
-                                                                text = "+ Flashcard",
-                                                                color = NeonCyan,
-                                                                fontSize = 10.sp,
-                                                                fontWeight = FontWeight.SemiBold
-                                                            )
-                                                        }
                                                     }
                                                 }
                                             }
@@ -1158,7 +727,7 @@ fun ConversationScreen(
                     }
                 }
             } else {
-                // Central Orb Experience
+                // Central Arc Reactor Orb Experience
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1166,16 +735,14 @@ fun ConversationScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
-                    // Animated Orb
                     AnimatedOrb(
                         state = orbState,
                         audioRms = audioRms,
-                        size = 210.dp
+                        size = 200.dp
                     )
 
-                    Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
 
-                    // Status Text with Orb State Feedback
                     Text(
                         text = statusText,
                         color = when (orbState) {
@@ -1185,14 +752,14 @@ fun ConversationScreen(
                             OrbState.OFFLINE -> OfflineAmber
                             else -> TextSecondary
                         },
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
                         textAlign = TextAlign.Center
                     )
 
-                    Spacer(modifier = Modifier.height(10.dp))
+                    Spacer(modifier = Modifier.height(8.dp))
 
-                    // Local Source Ingestion & Learning Indicator
+                    // Ingesting / Downloading Progress Bar
                     AnimatedVisibility(
                         visible = isIngestingSource,
                         enter = fadeIn() + expandVertically(),
@@ -1214,18 +781,12 @@ fun ConversationScreen(
                                     )
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text(
-                                        text = "Mémorisation et apprentissage de ta source…",
+                                        text = "Téléchargement et mémorisation dans le téléphone…",
                                         color = NeonCyan,
                                         fontSize = 12.sp,
                                         fontWeight = FontWeight.SemiBold
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text(
-                                    text = "$companionDisplayName apprend ce contenu pour que vous puissiez en discuter !",
-                                    color = TextSecondary,
-                                    fontSize = 11.sp
-                                )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 LinearProgressIndicator(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1236,104 +797,20 @@ fun ConversationScreen(
                         }
                     }
 
-                    // Dedicated TTS Speaking Visualizer Banner
-                    AnimatedVisibility(
-                        visible = isSpeaking,
-                        enter = fadeIn() + expandVertically(),
-                        exit = fadeOut() + shrinkVertically()
-                    ) {
-                        val ttsTransition = rememberInfiniteTransition(label = "ttsWave")
-                        Surface(
-                            color = DarkSurfaceVariant,
-                            shape = RoundedCornerShape(12.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
-                            modifier = Modifier
-                                .fillMaxWidth(0.92f)
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Row(
-                                    modifier = Modifier.weight(1f),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.AutoMirrored.Filled.VolumeUp,
-                                        contentDescription = null,
-                                        tint = NeonViolet,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = if (!currentSpokenWord.isNullOrBlank()) "« $currentSpokenWord »" else "$companionDisplayName parle...",
-                                        color = NeonCyan,
-                                        fontSize = 12.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-
-                                // Audio equalizer bars animation
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    repeat(5) { barIndex ->
-                                        val barHeight by ttsTransition.animateFloat(
-                                            initialValue = 4f,
-                                            targetValue = 18f,
-                                            animationSpec = infiniteRepeatable(
-                                                animation = tween(durationMillis = 350 + barIndex * 120),
-                                                repeatMode = RepeatMode.Reverse
-                                            ),
-                                            label = "tts_bar_$barIndex"
-                                        )
-                                        Box(
-                                            modifier = Modifier
-                                                .width(3.dp)
-                                                .height(barHeight.dp)
-                                                .clip(RoundedCornerShape(1.5.dp))
-                                                .background(if (barIndex % 2 == 0) NeonCyan else NeonViolet)
-                                        )
-                                    }
-
-                                    Spacer(modifier = Modifier.width(6.dp))
-
-                                    // Direct stop button
-                                    IconButton(
-                                        onClick = { viewModel.stopSpeaking() },
-                                        modifier = Modifier.size(24.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Arrêter la voix",
-                                            tint = AlertPink,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Live Subtitles Display (User Speech & Code Speech)
+                    // Live Transcript and Reply Box
                     GlassCard(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                            .fillMaxWidth(0.95f)
+                            .padding(vertical = 6.dp),
                         cornerRadius = 16.dp,
-                        borderColor = DarkCardBorder
+                        borderColor = when (orbState) {
+                            OrbState.LISTENING -> NeonCyan
+                            OrbState.SPEAKING -> NeonViolet
+                            else -> DarkCardBorder
+                        }
                     ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp)
-                        ) {
-                            // User Spoken / Typed Transcript
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            // User Spoken Transcript
                             if (liveTranscript.isNotBlank()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1359,7 +836,7 @@ fun ConversationScreen(
                                 Spacer(modifier = Modifier.height(8.dp))
                             }
 
-                            // Code's Spoken Answer
+                            // J.A.R.V.I.S. Spoken Answer
                             if (liveReply.isNotBlank()) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1375,31 +852,31 @@ fun ConversationScreen(
                                     Text(
                                         text = liveReply,
                                         color = TextPrimary,
-                                        fontSize = 14.sp,
-                                        lineHeight = 20.sp
+                                        fontSize = 13.sp,
+                                        lineHeight = 19.sp
                                     )
                                 }
                             } else if (liveTranscript.isBlank()) {
                                 Text(
-                                    text = "« Parle librement à $companionDisplayName ou demande-lui d'apprendre ce que tu veux… »",
+                                    text = "« Parlez à Jarvis ou demandez-lui de télécharger des informations… »",
                                     color = TextMuted,
-                                    fontSize = 13.sp,
+                                    fontSize = 12.sp,
                                     textAlign = TextAlign.Center,
                                     modifier = Modifier.fillMaxWidth()
                                 )
                             }
 
-                            // Oral Correction Pill
+                            // Correction Note (if any)
                             if (!correctionNote.isNullOrBlank()) {
-                                Spacer(modifier = Modifier.height(8.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Surface(
                                     color = AlertPink.copy(alpha = 0.15f),
                                     shape = RoundedCornerShape(8.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, AlertPink.copy(alpha = 0.4f)),
+                                    border = BorderStroke(1.dp, AlertPink.copy(alpha = 0.4f)),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Row(
-                                        modifier = Modifier.padding(8.dp),
+                                        modifier = Modifier.padding(6.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
                                         Icon(
@@ -1419,19 +896,19 @@ fun ConversationScreen(
                                 }
                             }
 
+                            // Live action buttons (Listen / Repeat)
                             if (liveReply.isNotBlank()) {
-                                Spacer(modifier = Modifier.height(10.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.End,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    // Live reply speak / stop button
                                     val isReplySpeaking = isSpeaking && (currentlySpokenText == liveReply || currentlySpokenText == null)
                                     Surface(
                                         color = if (isReplySpeaking) AlertPink.copy(alpha = 0.2f) else ElectricBlue.copy(alpha = 0.2f),
                                         shape = RoundedCornerShape(10.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
+                                        border = BorderStroke(
                                             1.dp,
                                             if (isReplySpeaking) AlertPink.copy(alpha = 0.6f) else ElectricBlue.copy(alpha = 0.6f)
                                         ),
@@ -1444,15 +921,14 @@ fun ConversationScreen(
                                                     viewModel.speak(liveReply)
                                                 }
                                             }
-                                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                                            .testTag("tts_live_reply_button")
+                                            .padding(horizontal = 10.dp, vertical = 4.dp)
                                     ) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Icon(
                                                 imageVector = if (isReplySpeaking) Icons.Default.Stop else Icons.AutoMirrored.Filled.VolumeUp,
-                                                contentDescription = if (isReplySpeaking) "Arrêter la voix" else "Écouter la réponse",
+                                                contentDescription = null,
                                                 tint = if (isReplySpeaking) AlertPink else ElectricBlue,
-                                                modifier = Modifier.size(14.dp)
+                                                modifier = Modifier.size(13.dp)
                                             )
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Text(
@@ -1462,73 +938,6 @@ fun ConversationScreen(
                                                 fontWeight = FontWeight.SemiBold
                                             )
                                         }
-                                    }
-
-                                    Spacer(modifier = Modifier.width(8.dp))
-
-                                    Surface(
-                                        color = DarkSurface,
-                                        shape = RoundedCornerShape(10.dp),
-                                        border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(10.dp))
-                                            .clickable { viewModel.showAddFlashcard(prefilledExample = liveReply) }
-                                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                                            .testTag("save_live_word_button")
-                                    ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Icon(
-                                                imageVector = Icons.Default.BookmarkAdd,
-                                                contentDescription = "Sauvegarder un mot",
-                                                tint = NeonCyan,
-                                                modifier = Modifier.size(14.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(6.dp))
-                                            Text(
-                                                text = "Sauvegarder",
-                                                color = NeonCyan,
-                                                fontSize = 11.sp,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Storage Cleanup Proposal Card (Section 7.3)
-                    storagePromptResource?.let { resource ->
-                        Spacer(modifier = Modifier.height(6.dp))
-                        GlassCard(
-                            modifier = Modifier.fillMaxWidth(),
-                            borderColor = AlertPink,
-                            backgroundColor = DarkSurfaceVariant
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Text(
-                                    text = "J'ai fini avec ${resource.name} (${resource.sizeMb} Mo). Veux-tu que je le supprime pour libérer de l'espace ?",
-                                    color = TextPrimary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.End
-                                ) {
-                                    OutlinedButton(
-                                        onClick = { viewModel.cancelStoragePrompt() },
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary),
-                                        modifier = Modifier.padding(end = 8.dp)
-                                    ) {
-                                        Text("Non, garder", fontSize = 11.sp)
-                                    }
-                                    Button(
-                                        onClick = { viewModel.deleteResourceWithConfirmation(resource) },
-                                        colors = ButtonDefaults.buttonColors(containerColor = AlertPink)
-                                    ) {
-                                        Text("Oui, supprimer", fontSize = 11.sp, color = Color.White)
                                     }
                                 }
                             }
@@ -1541,30 +950,21 @@ fun ConversationScreen(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 6.dp),
+                    .padding(bottom = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 val infiniteTransition = rememberInfiniteTransition(label = "recordingPulse")
                 val pulseScale by infiniteTransition.animateFloat(
                     initialValue = 1f,
-                    targetValue = 1.16f,
+                    targetValue = 1.15f,
                     animationSpec = infiniteRepeatable(
                         animation = tween(650),
                         repeatMode = RepeatMode.Reverse
                     ),
                     label = "pulseScale"
                 )
-                val pulseAlpha by infiniteTransition.animateFloat(
-                    initialValue = 0.35f,
-                    targetValue = 0.95f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(650),
-                        repeatMode = RepeatMode.Reverse
-                    ),
-                    label = "pulseAlpha"
-                )
 
-                // WhatsApp-style Vocal Recording Bar (Visible when isListening)
+                // Recording Visualizer Bar
                 AnimatedVisibility(
                     visible = isListening,
                     enter = fadeIn() + expandVertically(),
@@ -1574,302 +974,136 @@ fun ConversationScreen(
                     val seconds = recordingDuration % 60
                     val formattedTime = "%02d:%02d".format(minutes, seconds)
 
-                    Column(
+                    Surface(
+                        color = AlertPink.copy(alpha = 0.18f),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.5.dp, AlertPink.copy(alpha = 0.7f)),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
+                            .padding(bottom = 6.dp)
                     ) {
-                        Surface(
-                            color = AlertPink.copy(alpha = 0.18f),
-                            shape = RoundedCornerShape(18.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.5.dp, AlertPink.copy(alpha = 0.7f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(12.dp)
-                                                .clip(CircleShape)
-                                                .background(AlertPink.copy(alpha = pulseAlpha))
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            text = formattedTime,
-                                            color = AlertPink,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(
-                                            text = "Écoute continue illimitée (ne se coupe jamais)",
-                                            color = TextPrimary,
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-
-                                    // Discard / Cancel Recording
-                                    IconButton(
-                                        onClick = { viewModel.cancelRecording() },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Close,
-                                            contentDescription = "Annuler l'enregistrement",
-                                            tint = AlertPink,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                }
-
-                                if (liveTranscript.isNotBlank()) {
-                                    Spacer(modifier = Modifier.height(6.dp))
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(10.dp)
+                                            .clip(CircleShape)
+                                            .background(AlertPink)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "« $liveTranscript »",
+                                        text = formattedTime,
+                                        color = AlertPink,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = "J.A.R.V.I.S. vous écoute…",
                                         color = TextPrimary,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Medium,
-                                        maxLines = 4,
-                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                    )
-                                } else {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = "Prends ton temps, parle et fais des pauses librement. C'est toi qui réappuieras pour envoyer !",
-                                        color = TextMuted,
-                                        fontSize = 11.sp
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                 }
 
-                                Spacer(modifier = Modifier.height(8.dp))
-                                // Audio level visualizer
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
+                                IconButton(
+                                    onClick = { viewModel.cancelRecording() },
+                                    modifier = Modifier.size(28.dp)
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.GraphicEq,
-                                        contentDescription = null,
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Annuler",
                                         tint = AlertPink,
                                         modifier = Modifier.size(16.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                            }
+
+                            if (liveTranscript.isNotBlank()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "« $liveTranscript »",
+                                    color = TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+                            // Audio visualizer bar
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = AlertPink,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(4.dp)
+                                        .clip(RoundedCornerShape(2.dp))
+                                        .background(DarkSurfaceVariant)
+                                ) {
                                     Box(
                                         modifier = Modifier
-                                            .weight(1f)
-                                            .height(4.dp)
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(audioRms.coerceIn(0.08f, 1f))
                                             .clip(RoundedCornerShape(2.dp))
-                                            .background(DarkSurfaceVariant)
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxHeight()
-                                                .fillMaxWidth(audioRms.coerceIn(0.08f, 1f))
-                                                .clip(RoundedCornerShape(2.dp))
-                                                .background(
-                                                    Brush.horizontalGradient(
-                                                        listOf(NeonCyan, AlertPink)
-                                                    )
-                                                )
-                                        )
-                                    }
-                                }
-
-                                Spacer(modifier = Modifier.height(6.dp))
-                                // Quick voice command chips
-                                androidx.compose.foundation.lazy.LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    // System Voice Input Fallback Chip
-                                    item {
-                                        Surface(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { onLaunchSystemSpeech() }
-                                                .testTag("system_speech_dictation_chip"),
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = ElectricBlue.copy(alpha = 0.25f),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue)
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Mic,
-                                                    contentDescription = null,
-                                                    tint = Color.White,
-                                                    modifier = Modifier.size(12.dp)
-                                                )
-                                                Text(
-                                                    text = "Dictée système",
-                                                    color = Color.White,
-                                                    fontSize = 10.sp,
-                                                    fontWeight = FontWeight.Bold
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    // Voice Commands Help Chip
-                                    item {
-                                        Surface(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable { viewModel.showVoiceCommandHelp() }
-                                                .testTag("show_voice_commands_chip"),
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = NeonViolet.copy(alpha = 0.2f),
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.6f))
-                                        ) {
-                                            Text(
-                                                text = "Commandes vocales ?",
-                                                color = NeonViolet,
-                                                fontSize = 10.sp,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        }
-                                    }
-
-                                    val quickHints = listOf(
-                                        "Mode prof d'anglais",
-                                        "Recherche sur internet...",
-                                        "Lance un quiz",
-                                        "Répète",
-                                        "Stop",
-                                        "Change de voix"
+                                            .background(Brush.horizontalGradient(listOf(NeonCyan, AlertPink)))
                                     )
-                                    items(quickHints) { hint ->
-                                        Surface(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(12.dp))
-                                                .clickable {
-                                                    viewModel.executeVoiceCommandText(hint)
-                                                },
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = DarkSurfaceVariant,
-                                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f))
-                                        ) {
-                                            Text(
-                                                text = hint,
-                                                color = NeonCyan,
-                                                fontSize = 10.sp,
-                                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                                fontWeight = FontWeight.Medium
-                                            )
-                                        }
-                                    }
                                 }
                             }
                         }
                     }
                 }
 
-                // Hands-Free Quick Launch & Status Chip
-                Surface(
-                    modifier = Modifier
-                        .padding(vertical = 4.dp)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable {
-                            if (isHandsFreeMode) {
-                                viewModel.showHandsFreeSheet()
-                            } else {
-                                viewModel.startHandsFreeConversation()
-                            }
-                        }
-                        .testTag("hands_free_quick_chip"),
-                    color = if (isHandsFreeMode) SuccessGreen.copy(alpha = 0.2f) else DarkSurfaceVariant,
-                    shape = RoundedCornerShape(16.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isHandsFreeMode) SuccessGreen else DarkCardBorder
-                    )
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(text = "🇬🇧", fontSize = 14.sp)
-                        Text(
-                            text = if (isHandsFreeMode) "Mains Libres Actif • Appuie pour ouvrir l'atelier" else "Pratique d'anglais Mains Libres (Full Duplex)",
-                            color = if (isHandsFreeMode) SuccessGreen else NeonCyan,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-
-                // Action Buttons Row with Huge Center Microphone
+                // Microphone & Controls Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 4.dp, horizontal = 4.dp),
+                        .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left Column: History & Stop Speaking
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // History Toggle
+                    IconButton(
+                        onClick = { viewModel.toggleHistory() },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(DarkSurfaceVariant)
+                            .border(1.dp, DarkCardBorder, CircleShape)
+                            .testTag("history_toggle_button")
                     ) {
-                        // History Toggle Button
-                        IconButton(
-                            onClick = { viewModel.toggleHistory() },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(DarkSurfaceVariant)
-                                .border(1.dp, DarkCardBorder, CircleShape)
-                                .testTag("history_toggle_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.History,
-                                contentDescription = "Historique",
-                                tint = if (isHistoryVisible) NeonCyan else TextSecondary,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        // Stop Speaking Button (Active when speaking)
-                        IconButton(
-                            onClick = { viewModel.stopSpeaking() },
-                            enabled = isSpeaking,
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(if (isSpeaking) AlertPink.copy(alpha = 0.25f) else DarkSurfaceVariant.copy(alpha = 0.5f))
-                                .border(1.dp, if (isSpeaking) AlertPink else DarkCardBorder, CircleShape)
-                                .testTag("stop_speaking_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Stop,
-                                contentDescription = "Interrompre $companionDisplayName",
-                                tint = if (isSpeaking) AlertPink else TextMuted,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.History,
+                            contentDescription = "Historique",
+                            tint = if (isHistoryVisible) NeonCyan else TextSecondary,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
 
-                    // Central Hero Microphone Button (96dp - Highly visible & easy to tap)
+                    // Hero Central Microphone (Tap to talk / stop)
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier.padding(horizontal = 4.dp)
                     ) {
                         if (isListening) {
-                            // Pulsating glowing outer ring when recording
                             Box(
                                 modifier = Modifier
-                                    .size((96 * pulseScale).dp)
+                                    .size((88 * pulseScale).dp)
                                     .clip(CircleShape)
                                     .background(AlertPink.copy(alpha = 0.28f))
                             )
@@ -1877,15 +1111,15 @@ fun ConversationScreen(
 
                         Surface(
                             modifier = Modifier
-                                .size(96.dp)
+                                .size(88.dp)
                                 .clip(CircleShape)
                                 .clickable { onMicClick() }
                                 .testTag("main_mic_button"),
                             color = if (isListening) AlertPink else ElectricBlue,
                             shape = CircleShape,
-                            shadowElevation = 14.dp,
-                            border = androidx.compose.foundation.BorderStroke(
-                                4.dp,
+                            shadowElevation = 12.dp,
+                            border = BorderStroke(
+                                3.dp,
                                 if (isListening) Color.White else NeonCyan
                             )
                         ) {
@@ -1895,80 +1129,62 @@ fun ConversationScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isListening) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
-                                    contentDescription = if (isListening) "Envoyer le message vocal" else "Parler à $companionDisplayName",
+                                    contentDescription = if (isListening) "Envoyer" else "Parler à J.A.R.V.I.S.",
                                     tint = Color.White,
-                                    modifier = Modifier.size(48.dp)
+                                    modifier = Modifier.size(44.dp)
                                 )
                             }
                         }
                     }
 
-                    // Right Column: Repeat & Add Sources
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    // Attach / Add Local Files
+                    IconButton(
+                        onClick = { showAddSourceFileDialog = true },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(NeonCyan.copy(alpha = 0.2f))
+                            .border(1.dp, NeonCyan.copy(alpha = 0.6f), CircleShape)
+                            .testTag("add_source_chat_button")
                     ) {
-                        // Repeat Button
-                        IconButton(
-                            onClick = { viewModel.repeatLastReply() },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(DarkSurfaceVariant)
-                                .border(1.dp, DarkCardBorder, CircleShape)
-                                .testTag("repeat_reply_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Replay,
-                                contentDescription = "Répéter la réponse",
-                                tint = NeonViolet,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
-
-                        // Add Sources button (Documents, Images, Folders, Links)
-                        IconButton(
-                            onClick = { showAddSourceDialog = true },
-                            modifier = Modifier
-                                .size(44.dp)
-                                .clip(CircleShape)
-                                .background(NeonCyan.copy(alpha = 0.2f))
-                                .border(1.dp, NeonCyan.copy(alpha = 0.6f), CircleShape)
-                                .testTag("add_source_chat_button")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.AttachFile,
-                                contentDescription = "Ajouter des Sources du téléphone",
-                                tint = NeonCyan,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.AttachFile,
+                            contentDescription = "Ajouter des fichiers du téléphone",
+                            tint = NeonCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
                     }
                 }
 
-                // Helper indicator text directly under the big mic button
+                // Helper micro text
                 Text(
-                    text = if (isListening) "🔴 Écoute active… Réappuie UNIQUEMENT quand tu as fini pour envoyer !" else "Appuie sur le gros micro pour parler à $companionDisplayName 🎙️",
+                    text = if (isListening) "🔴 Écoute en cours… Réappuyez pour envoyer !" else "Appuyez sur le micro pour parler à J.A.R.V.I.S. 🎙️",
                     color = if (isListening) AlertPink else NeonCyan,
                     fontSize = 11.sp,
-                    fontWeight = if (isListening) FontWeight.Bold else FontWeight.Medium,
+                    fontWeight = FontWeight.Medium,
                     textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(vertical = 3.dp)
+                    modifier = Modifier.padding(vertical = 2.dp)
                 )
-
-                Spacer(modifier = Modifier.height(2.dp))
 
                 // Text Input Bar with Send Button
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp),
+                        .padding(horizontal = 4.dp, vertical = 2.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     OutlinedTextField(
                         value = textInput,
                         onValueChange = { textInput = it },
-                        placeholder = { Text("Ou écris un message à $companionDisplayName…", color = TextMuted, fontSize = 12.sp) },
+                        placeholder = {
+                            Text(
+                                "Écrivez ou demandez à Jarvis de télécharger...",
+                                color = TextMuted,
+                                fontSize = 12.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
                         modifier = Modifier
                             .weight(1f)
                             .testTag("chat_text_input"),
@@ -1990,7 +1206,7 @@ fun ConversationScreen(
                             ) {
                                 Icon(
                                     imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                                    contentDescription = "Dictée vocale STT",
+                                    contentDescription = "Microphone",
                                     tint = if (isListening) AlertPink else NeonCyan,
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -2023,12 +1239,55 @@ fun ConversationScreen(
             }
         }
 
-        // Modal Dialog to add Sources (Documents, Images, Folders, Links) directly
-        if (showAddSourceDialog) {
-            AddSourceModalDialog(
-                companionName = companionDisplayName,
+        // =========================================================================
+        // MODAL 1: TÉLÉCHARGER UNE SOURCE / DOSSIER DANS LE TÉLÉPHONE
+        // =========================================================================
+        if (showDownloadDialog) {
+            DownloadSourceModalDialog(
+                onDownloadTopic = { topic ->
+                    showDownloadDialog = false
+                    viewModel.downloadNewKnowledge(topic)
+                },
+                onDownloadUrl = { url ->
+                    showDownloadDialog = false
+                    viewModel.ingestSourceFromUrl(url)
+                },
+                onDismiss = { showDownloadDialog = false }
+            )
+        }
+
+        // =========================================================================
+        // MODAL 2: GESTION DE LA MÉMOIRE & SOURCES DE J.A.R.V.I.S.
+        // =========================================================================
+        if (showMemoryManagerDialog) {
+            JarvisPhoneMemoryDialog(
+                documents = allDocuments,
+                usedMb = totalMb,
+                maxLimitGb = maxLimitGb,
+                cacheStats = cacheStats,
+                onClearCache = { viewModel.clearResponseCache() },
+                onOpenDownloadDialog = {
+                    showMemoryManagerDialog = false
+                    showDownloadDialog = true
+                },
+                onDiscussSource = { doc ->
+                    showMemoryManagerDialog = false
+                    viewModel.startDiscussionOnDocument(doc)
+                },
+                onDeleteSource = { doc ->
+                    viewModel.deleteDocument(doc)
+                },
+                onDismiss = { showMemoryManagerDialog = false }
+            )
+        }
+
+        // =========================================================================
+        // MODAL 3: AJOUT DE FICHIERS LOCAUX DU TÉLÉPHONE
+        // =========================================================================
+        if (showAddSourceFileDialog) {
+            AddSourceFileDialog(
                 onPickDocuments = {
-                    showAddSourceDialog = false
+                    showAddSourceFileDialog = false
                     documentPickerLauncher.launch(
                         arrayOf(
                             "application/pdf",
@@ -2041,102 +1300,43 @@ fun ConversationScreen(
                     )
                 },
                 onPickImages = {
-                    showAddSourceDialog = false
+                    showAddSourceFileDialog = false
                     photoPickerLauncher.launch(
                         PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                     )
                 },
                 onPickFolder = {
-                    showAddSourceDialog = false
+                    showAddSourceFileDialog = false
                     folderPickerLauncher.launch(null)
                 },
-                onAddLink = { url ->
-                    showAddSourceDialog = false
-                    viewModel.ingestSourceFromUrl(url)
-                },
-                onDismiss = { showAddSourceDialog = false }
-            )
-        }
-
-        // Calame Citation Excerpt Dialog
-        val activeCitationPreview by viewModel.activeCitationPreview.collectAsState()
-        activeCitationPreview?.let { citation ->
-            AlertDialog(
-                onDismissRequest = { viewModel.closeCitation() },
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = citation.sourceTitle,
-                            color = TextPrimary,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                },
-                text = {
-                    Column {
-                        Text(
-                            text = "Passage exact cité (indices ${citation.startOffset}..${citation.endOffset}) :",
-                            color = NeonCyan,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Surface(
-                            color = DarkSurface,
-                            shape = RoundedCornerShape(8.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = citation.text,
-                                color = TextPrimary,
-                                fontSize = 12.sp,
-                                lineHeight = 17.sp,
-                                modifier = Modifier.padding(10.dp)
-                            )
-                        }
-                    }
-                },
-                confirmButton = {
-                    Button(
-                        onClick = { viewModel.closeCitation() },
-                        colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
-                    ) {
-                        Text("Fermer", color = Color.Black, fontWeight = FontWeight.Bold)
-                    }
-                },
-                containerColor = DarkSurfaceVariant
+                onDismiss = { showAddSourceFileDialog = false }
             )
         }
     }
 }
 
-
+/**
+ * Modal to ask Jarvis to download information on a subject or URL.
+ */
 @Composable
-private fun AddSourceModalDialog(
-    companionName: String,
-    onPickDocuments: () -> Unit,
-    onPickImages: () -> Unit,
-    onPickFolder: () -> Unit,
-    onAddLink: (String) -> Unit,
+private fun DownloadSourceModalDialog(
+    onDownloadTopic: (String) -> Unit,
+    onDownloadUrl: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    var linkInput by remember { mutableStateOf("") }
+    var subjectInput by remember { mutableStateOf("") }
+    var urlInput by remember { mutableStateOf("") }
+    var selectedTab by remember { mutableStateOf(0) } // 0: Sujet / Thématique, 1: Lien Web / URL
 
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = DarkSurface,
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.AttachFile, contentDescription = null, tint = NeonCyan)
+                Icon(Icons.Default.CloudDownload, contentDescription = null, tint = NeonCyan)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = "Ajouter des Sources à $companionName",
+                    text = "Télécharger dans la Mémoire",
                     fontSize = 17.sp,
                     fontWeight = FontWeight.Bold,
                     color = TextPrimary
@@ -2149,141 +1349,508 @@ private fun AddSourceModalDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Choisis un document, une image, un dossier de ton téléphone ou donne un lien pour que $companionName l'apprenne et en discute avec toi :",
+                    text = "Demandez à J.A.R.V.I.S. de télécharger un dossier complet. Il sera enregistré directement sur votre téléphone et disponible en ligne comme hors ligne :",
                     color = TextSecondary,
                     fontSize = 12.sp,
                     lineHeight = 16.sp
                 )
 
-                // 1. Documents picker button
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onPickDocuments() },
-                    color = DarkSurfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                // Tabs: Sujet vs Lien
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
+                            .clickable { selectedTab = 0 },
+                        color = if (selectedTab == 0) NeonCyan else DarkSurfaceVariant
                     ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = NeonCyan.copy(alpha = 0.15f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Documents du téléphone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("PDF, Word, TXT, Code, JSON…", color = TextMuted, fontSize = 11.sp)
-                        }
+                        Text(
+                            text = "Sujet / Cours",
+                            color = if (selectedTab == 0) DarkBackground else TextSecondary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                    Surface(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp))
+                            .clickable { selectedTab = 1 },
+                        color = if (selectedTab == 1) NeonCyan else DarkSurfaceVariant
+                    ) {
+                        Text(
+                            text = "Lien URL / Web",
+                            color = if (selectedTab == 1) DarkBackground else TextSecondary,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
                     }
                 }
 
-                // 2. Images picker button
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onPickImages() },
-                    color = DarkSurfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = NeonViolet.copy(alpha = 0.15f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Image, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Images & Photos de la galerie", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Photos, captures d'écran, schémas…", color = TextMuted, fontSize = 11.sp)
-                        }
-                    }
-                }
-
-                // 3. Folder picker button
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .clickable { onPickFolder() },
-                    color = DarkSurfaceVariant,
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.5f)),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            shape = CircleShape,
-                            color = ElectricBlue.copy(alpha = 0.15f),
-                            modifier = Modifier.size(36.dp)
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(20.dp))
-                            }
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column {
-                            Text("Dossier complet du téléphone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            Text("Importer tous les fichiers d'un répertoire", color = TextMuted, fontSize = 11.sp)
-                        }
-                    }
-                }
-
-                // 4. Link Input (YouTube, TikTok, Web)
-                Column(modifier = Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                    Text("Ou coller un lien (YouTube, TikTok, Web) :", color = TextSecondary, fontSize = 11.sp)
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
+                if (selectedTab == 0) {
+                    Column {
                         OutlinedTextField(
-                            value = linkInput,
-                            onValueChange = { linkInput = it },
-                            placeholder = { Text("https://...", color = TextMuted, fontSize = 11.sp) },
-                            modifier = Modifier.weight(1f),
-                            shape = RoundedCornerShape(10.dp),
+                            value = subjectInput,
+                            onValueChange = { subjectInput = it },
+                            placeholder = { Text("Ex: Les trous noirs, Histoire de Rome...", color = TextMuted, fontSize = 12.sp) },
+                            modifier = Modifier.fillMaxWidth(),
                             singleLine = true,
                             colors = OutlinedTextFieldDefaults.colors(
                                 focusedBorderColor = NeonCyan,
                                 unfocusedBorderColor = DarkCardBorder,
                                 focusedTextColor = TextPrimary,
-                                unfocusedTextColor = TextPrimary,
-                                focusedContainerColor = DarkSurfaceVariant,
-                                unfocusedContainerColor = DarkSurfaceVariant
+                                unfocusedTextColor = TextPrimary
                             )
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Button(
-                            onClick = {
-                                if (linkInput.isNotBlank()) {
-                                    onAddLink(linkInput.trim())
-                                }
-                            },
-                            enabled = linkInput.isNotBlank(),
-                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
-                            shape = RoundedCornerShape(10.dp)
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("Idées rapides :", color = TextMuted, fontSize = 10.sp)
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text("Apprendre", color = DarkBackground, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            listOf("L'intelligence artificielle", "Les trous noirs", "La Rome antique", "Physique quantique").forEach { idea ->
+                                Surface(
+                                    color = DarkSurfaceVariant,
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.3f)),
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .clickable { subjectInput = idea }
+                                ) {
+                                    Text(idea, color = NeonCyan, fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp))
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = urlInput,
+                        onValueChange = { urlInput = it },
+                        placeholder = { Text("https://fr.wikipedia.org/wiki/...", color = TextMuted, fontSize = 12.sp) },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = NeonCyan,
+                            unfocusedBorderColor = DarkCardBorder,
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextPrimary
+                        )
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    if (selectedTab == 0 && subjectInput.isNotBlank()) {
+                        onDownloadTopic(subjectInput.trim())
+                    } else if (selectedTab == 1 && urlInput.isNotBlank()) {
+                        onDownloadUrl(urlInput.trim())
+                    }
+                },
+                enabled = (selectedTab == 0 && subjectInput.isNotBlank()) || (selectedTab == 1 && urlInput.isNotBlank()),
+                colors = ButtonDefaults.buttonColors(containerColor = NeonCyan)
+            ) {
+                Text("Télécharger dans le téléphone", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = TextSecondary)
+            }
+        }
+    )
+}
+
+/**
+ * Modal dialog showing all downloaded sources stored on the device, their size, and storage capacity.
+ */
+@Composable
+private fun JarvisPhoneMemoryDialog(
+    documents: List<DownloadedDocument>,
+    usedMb: Double,
+    maxLimitGb: Double,
+    cacheStats: CacheStats,
+    onClearCache: () -> Unit,
+    onOpenDownloadDialog: () -> Unit,
+    onDiscussSource: (DownloadedDocument) -> Unit,
+    onDeleteSource: (DownloadedDocument) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val usedFraction = ((usedMb / (maxLimitGb * 1024.0))).coerceIn(0.0, 1.0).toFloat()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Smartphone, contentDescription = null, tint = NeonCyan)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Mémoire Téléphone",
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary
+                    )
+                }
+                IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                    Icon(Icons.Default.Close, contentDescription = "Fermer", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 440.dp)
+            ) {
+                // Storage Gauge Box
+                Surface(
+                    color = DarkSurfaceVariant,
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "Capacité allouée au téléphone",
+                                color = TextSecondary,
+                                fontSize = 11.sp
+                            )
+                            Text(
+                                text = "${String.format(Locale.US, "%.1f", usedMb)} Mo / ${maxLimitGb.toInt()} Go",
+                                color = NeonCyan,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        LinearProgressIndicator(
+                            progress = { usedFraction },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(5.dp)
+                                .clip(RoundedCornerShape(2.dp)),
+                            color = NeonCyan,
+                            trackColor = DarkBackground
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = "J.A.R.V.I.S. exploite cette mémoire locale pour discuter avec vous hors ligne.",
+                            color = TextMuted,
+                            fontSize = 10.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Cache Strategy Status Card
+                Surface(
+                    color = DarkSurfaceVariant,
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, DarkCardBorderViolet),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = ElectricBlue,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "Cache Réponses Hors-Ligne",
+                                    color = TextPrimary,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "${cacheStats.totalCachedCount} requêtes prêtes instantanément",
+                                color = TextSecondary,
+                                fontSize = 10.sp
+                            )
+                        }
+                        if (cacheStats.totalCachedCount > 0) {
+                            TextButton(
+                                onClick = onClearCache,
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 6.dp, vertical = 2.dp)
+                            ) {
+                                Text(
+                                    text = "Vider",
+                                    color = AlertPink,
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action to download a new source
+                Button(
+                    onClick = onOpenDownloadDialog,
+                    colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                    shape = RoundedCornerShape(10.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(Icons.Default.CloudDownload, contentDescription = null, tint = DarkBackground, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text("+ Télécharger une nouvelle source", color = DarkBackground, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                Text(
+                    text = "Dossiers & Connaissances en mémoire (${documents.size}) :",
+                    color = TextPrimary,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                if (documents.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Aucune source téléchargée pour l'instant.\nCliquez sur le bouton ci-dessus pour que Jarvis télécharge un dossier sur votre téléphone !",
+                            color = TextMuted,
+                            fontSize = 11.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(documents) { doc ->
+                            Surface(
+                                color = DarkSurfaceVariant,
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, DarkCardBorder),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = doc.title,
+                                            color = TextPrimary,
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.weight(1f),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Surface(
+                                            color = SuccessGreen.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(6.dp),
+                                            border = BorderStroke(1.dp, SuccessGreen.copy(alpha = 0.5f))
+                                        ) {
+                                            Text(
+                                                text = "${doc.sizeMb} Mo • Hors-ligne",
+                                                color = SuccessGreen,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = doc.summary.take(120) + "...",
+                                        color = TextSecondary,
+                                        fontSize = 11.sp,
+                                        lineHeight = 15.sp,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.End,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        OutlinedButton(
+                                            onClick = { onDeleteSource(doc) },
+                                            colors = ButtonDefaults.outlinedButtonColors(contentColor = AlertPink),
+                                            border = BorderStroke(1.dp, AlertPink.copy(alpha = 0.6f)),
+                                            modifier = Modifier.height(30.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, tint = AlertPink, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Supprimer", fontSize = 10.sp, color = AlertPink)
+                                        }
+
+                                        Spacer(modifier = Modifier.width(8.dp))
+
+                                        Button(
+                                            onClick = { onDiscussSource(doc) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = NeonCyan),
+                                            modifier = Modifier.height(30.dp),
+                                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp)
+                                        ) {
+                                            Text("Discuter avec Jarvis", fontSize = 10.sp, color = DarkBackground, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Fermer", color = TextSecondary)
+            }
+        }
+    )
+}
+
+/**
+ * Modal to pick documents, images, or folders from phone storage.
+ */
+@Composable
+private fun AddSourceFileDialog(
+    onPickDocuments: () -> Unit,
+    onPickImages: () -> Unit,
+    onPickFolder: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DarkSurface,
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.AttachFile, contentDescription = null, tint = NeonCyan)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text(
+                    text = "Ajouter des fichiers du téléphone",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Choisissez des fichiers stockés sur votre téléphone pour les intégrer à la mémoire de J.A.R.V.I.S. :",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+
+                // 1. Documents
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onPickDocuments() },
+                    color = DarkSurfaceVariant,
+                    border = BorderStroke(1.dp, NeonCyan.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Description, contentDescription = null, tint = NeonCyan, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Documents (PDF, Word, TXT, JSON)", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Sélectionnez des fichiers de vos documents", color = TextMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+
+                // 2. Images
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onPickImages() },
+                    color = DarkSurfaceVariant,
+                    border = BorderStroke(1.dp, NeonViolet.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null, tint = NeonViolet, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Images & Photos de la galerie", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Photos, captures d'écran...", color = TextMuted, fontSize = 10.sp)
+                        }
+                    }
+                }
+
+                // 3. Folder
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(10.dp))
+                        .clickable { onPickFolder() },
+                    color = DarkSurfaceVariant,
+                    border = BorderStroke(1.dp, ElectricBlue.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Folder, contentDescription = null, tint = ElectricBlue, modifier = Modifier.size(20.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text("Dossier complet du téléphone", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text("Importer tous les fichiers d'un dossier", color = TextMuted, fontSize = 10.sp)
                         }
                     }
                 }
